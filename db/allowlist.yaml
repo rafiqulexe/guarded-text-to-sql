@@ -165,5 +165,5 @@ tables:
 
 # Function allowlist for AST_CHECK: any other function call is BLOCKED.
 functions: [count, sum, avg, min, max, round, coalesce, nullif, lower, upper,
-            length, trim, concat, date_trunc, extract, date_part, now, current_date,
+            length, trim, concat, date_trunc, extract, date_part, now, current_timestamp, current_date,
             to_char, cast]
