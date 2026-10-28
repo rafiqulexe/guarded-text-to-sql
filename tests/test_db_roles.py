@@ -27,12 +27,9 @@ def _connect(url: str = READER_URL, **kwargs: Any) -> psycopg.Connection[Any]:
     return psycopg.connect(url, connect_timeout=3, **kwargs)
 
 
-@pytest.fixture(scope="module")
-def reachable() -> None:
-    try:
-        _connect().close()
-    except psycopg.OperationalError as exc:
-        pytest.skip(f"target DB not reachable (docker compose up -d): {exc}")
+@pytest.fixture
+def reachable(reader_url: str) -> None:
+    """Skip unless Postgres is up (see conftest.reader_url)."""
 
 
 @pytest.fixture
