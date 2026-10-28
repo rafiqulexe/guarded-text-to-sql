@@ -1,0 +1,169 @@
+# Single source for: the schema prompt, the AST_CHECK function allowlist,
+# SCHEMA_CHECK, and the reader role's column grants (db/gen_grants.py).
+#
+# Anything not listed here (other tables, views, payment_p* partitions, columns,
+# pg_catalog, information_schema) is not allowed.
+# `restricted:` columns are BLOCKED if referenced and are never granted.
+
+tables:
+  actor:
+    description: "Actors appearing in films"
+    columns:
+      actor_id: {type: int, pk: true}
+      first_name: {type: text}
+      last_name: {type: text}
+
+  film:
+    description: "Movies available for rent"
+    columns:
+      film_id: {type: int, pk: true}
+      title: {type: text}
+      description: {type: text}
+      release_year: {type: int}
+      language_id: {type: int}
+      rental_duration: {type: smallint, description: "rental period in days"}
+      rental_rate: {type: numeric, description: "price per rental"}
+      length: {type: smallint, description: "running time in minutes"}
+      replacement_cost: {type: numeric}
+      rating: {type: mpaa_rating, values: [G, PG, PG-13, R, NC-17]}
+      special_features: {type: "text[]", values: [Trailers, Commentaries, Deleted Scenes, Behind the Scenes]}
+    foreign_keys:
+      language_id: language.language_id
+
+  film_actor:
+    description: "Which actors appear in which films (many-to-many)"
+    columns:
+      actor_id: {type: int, pk: true}
+      film_id: {type: int, pk: true}
+    foreign_keys:
+      actor_id: actor.actor_id
+      film_id: film.film_id
+
+  category:
+    description: "Film genres"
+    columns:
+      category_id: {type: int, pk: true}
+      name: {type: text}
+
+  film_category:
+    description: "Which category each film belongs to (many-to-many)"
+    columns:
+      film_id: {type: int, pk: true}
+      category_id: {type: int, pk: true}
+    foreign_keys:
+      film_id: film.film_id
+      category_id: category.category_id
+
+  language:
+    description: "Film languages"
+    columns:
+      language_id: {type: int, pk: true}
+      name: {type: text}
+
+  inventory:
+    description: "Physical copies of films held by each store"
+    columns:
+      inventory_id: {type: int, pk: true}
+      film_id: {type: int}
+      store_id: {type: int}
+    foreign_keys:
+      film_id: film.film_id
+      store_id: store.store_id
+
+  rental:
+    description: "Each time a customer rented an inventory item"
+    columns:
+      rental_id: {type: int, pk: true}
+      rental_date: {type: timestamptz}
+      inventory_id: {type: int}
+      customer_id: {type: int}
+      return_date: {type: timestamptz, description: "NULL if not yet returned"}
+      staff_id: {type: int}
+    foreign_keys:
+      inventory_id: inventory.inventory_id
+      customer_id: customer.customer_id
+      staff_id: staff.staff_id
+
+  payment:
+    description: "Payments made by customers for rentals (query this table, never its partitions)"
+    columns:
+      payment_id: {type: int, pk: true}
+      customer_id: {type: int}
+      staff_id: {type: int}
+      rental_id: {type: int}
+      amount: {type: numeric}
+      payment_date: {type: timestamptz}
+    # Logical keys: Pagila's partitioned payment table has no declared FK constraints.
+    foreign_keys:
+      customer_id: customer.customer_id
+      staff_id: staff.staff_id
+      rental_id: rental.rental_id
+
+  customer:
+    description: "Rental customers"
+    columns:
+      customer_id: {type: int, pk: true}
+      store_id: {type: int}
+      first_name: {type: text}
+      last_name: {type: text}
+      active: {type: int, values: [0, 1], description: "1 = active customer"}
+      create_date: {type: date}
+      address_id: {type: int}
+    foreign_keys:
+      store_id: store.store_id
+      address_id: address.address_id
+    restricted: [email]
+
+  address:
+    description: "Postal addresses of customers, staff and stores"
+    columns:
+      address_id: {type: int, pk: true}
+      address: {type: text}
+      district: {type: text}
+      city_id: {type: int}
+      postal_code: {type: text}
+    foreign_keys:
+      city_id: city.city_id
+    restricted: [phone]
+
+  city:
+    description: "Cities"
+    columns:
+      city_id: {type: int, pk: true}
+      city: {type: text}
+      country_id: {type: int}
+    foreign_keys:
+      country_id: country.country_id
+
+  country:
+    description: "Countries"
+    columns:
+      country_id: {type: int, pk: true}
+      country: {type: text}
+
+  store:
+    description: "Rental stores"
+    columns:
+      store_id: {type: int, pk: true}
+      manager_staff_id: {type: int}
+      address_id: {type: int}
+    foreign_keys:
+      manager_staff_id: staff.staff_id
+      address_id: address.address_id
+
+  staff:
+    description: "Store employees"
+    columns:
+      staff_id: {type: int, pk: true}
+      first_name: {type: text}
+      last_name: {type: text}
+      store_id: {type: int}
+      active: {type: bool}
+    foreign_keys:
+      store_id: store.store_id
+    restricted: [password, username, email, picture]
+
+# Function allowlist for AST_CHECK: any other function call is BLOCKED.
+functions: [count, sum, avg, min, max, round, coalesce, nullif, lower, upper,
+            length, trim, concat, date_trunc, extract, date_part, now, current_date,
+            to_char, cast]

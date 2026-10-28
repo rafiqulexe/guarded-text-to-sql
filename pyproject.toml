@@ -10,6 +10,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    "pyyaml>=6.0",
     "sqlalchemy>=2.0",
     "sqlglot>=25.0",
     "structlog>=24.1",
@@ -24,6 +25,7 @@ dev = [
     "pytest>=9.2.0",
     "pytest-asyncio>=1.4.1",
     "ruff>=0.17.3",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 
 [tool.ruff]
