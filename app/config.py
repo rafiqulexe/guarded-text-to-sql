@@ -7,7 +7,9 @@ from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):
+class DatabaseSettings(BaseSettings):
+    """DB URLs only, so migrations and DB scripts run without an API key."""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -15,13 +17,15 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    anthropic_api_key: SecretStr
-    gen_model: str = "claude-sonnet-5-5"
-    judge_model: str = "claude-haiku-5-5"
-
     target_db_url: str = "postgresql://sqlguard_reader:reader_pw@localhost:5432/pagila"
     admin_db_url: str = "postgresql://postgres:postgres@localhost:5432/pagila"
     app_db_url: str = "postgresql://sqlguard_app:app_pw@localhost:5432/sqlguard_app"
+
+
+class Settings(DatabaseSettings):
+    anthropic_api_key: SecretStr
+    gen_model: str = "claude-sonnet-5-5"
+    judge_model: str = "claude-haiku-5-5"
 
     default_limit: int = Field(100, gt=0)
     max_limit: int = Field(1000, gt=0)
