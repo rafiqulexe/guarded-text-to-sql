@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>sqlguard</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script id="config" type="application/json">{{ config | tojson }}</script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <main class="page">
+    <header class="page-header">
+      <h1 class="page-title">sqlguard</h1>
+      <p class="page-sub">Ask the Pagila DVD-rental database in plain English or Bangla. Every query passes four guard layers and runs read-only.</p>
+    </header>
+
+    <form id="ask-form" class="ask" autocomplete="off">
+      <label class="label" for="question">Question</label>
+      <textarea id="question" class="question" rows="3" required
+        maxlength="{{ config.maxQuestionChars }}"
+        placeholder="e.g. Which 5 film categories earned the most rental revenue?"></textarea>
+      <div class="ask-row">
+        <span class="hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> to ask · <span id="count" class="mono">0</span> / {{ config.maxQuestionChars }}</span>
+        <button id="ask-btn" class="btn btn-primary" type="submit">Ask</button>
+      </div>
+    </form>
+
+    <p id="error" class="notice notice-error" role="alert" hidden></p>
+
+    <section id="run" class="run" hidden aria-live="polite">
+      <div class="run-head">
+        <span id="status" class="chip"></span>
+        <span id="badge-wrap" class="badge-wrap"></span>
+        <span id="run-meta" class="run-meta mono"></span>
+      </div>
+      <p id="run-question" class="run-question"></p>
+
+      <div id="confirm-bar" class="panel panel-warn" hidden>
+        <p id="confirm-text" class="panel-title"></p>
+        <p class="panel-body">Rows are hidden until you review the SQL below. Show results re-runs the same SQL through the same guards.</p>
+        <div class="panel-actions">
+          <button id="confirm-btn" class="btn btn-primary" type="button">Show results</button>
+          <button id="cancel-btn" class="btn btn-ghost" type="button">Cancel</button>
+        </div>
+      </div>
+
+      <div id="blocked-panel" class="panel panel-danger" hidden>
+        <p class="panel-title">Blocked by: <span id="blocked-rule" class="mono"></span></p>
+        <p id="blocked-detail" class="panel-body"></p>
+        <p class="panel-body muted">No query results are shown for a blocked run. The SQL is shown for audit only; it was not executed.</p>
+      </div>
+
+      <div id="failed-panel" class="panel panel-danger" hidden>
+        <p class="panel-title">Failed</p>
+        <p id="failed-detail" class="panel-body"></p>
+      </div>
+
+      <div id="unanswerable-panel" class="panel panel-neutral" hidden>
+        <p class="panel-title">Can't answer from this data</p>
+        <p id="unanswerable-reason" class="panel-body"></p>
+      </div>
+
+      <div id="cancelled-panel" class="panel panel-neutral" hidden>
+        <p class="panel-title">Cancelled</p>
+        <p class="panel-body">The results of this run were not shown.</p>
+      </div>
+
+      <section id="sql-card" class="card sql-card" hidden>
+        <div class="card-head">
+          <h2 class="card-title">SQL</h2>
+          <button id="copy-btn" class="btn btn-ghost btn-sm" type="button">Copy</button>
+        </div>
+        <pre class="sql"><code id="sql"></code></pre>
+      </section>
+
+      <section id="results" class="card" hidden>
+        <div class="card-head">
+          <h2 class="card-title">Results</h2>
+          <span id="results-note" class="muted small"></span>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead id="results-head"></thead>
+            <tbody id="results-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2 class="card-title">Guard timeline</h2>
+          <span id="models" class="muted small"></span>
+        </div>
+        <ol id="transitions" class="transitions"></ol>
+        <ol id="timeline" class="timeline"></ol>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

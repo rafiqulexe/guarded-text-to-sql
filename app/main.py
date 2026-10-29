@@ -8,13 +8,17 @@ they are never stored (STATE.md rule 4), so GET /api/runs/{id} has none.
 import datetime as dt
 import math
 import uuid
+from collections.abc import Awaitable, Callable
 from decimal import Decimal
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import psycopg
-from fastapi import Depends, FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -28,8 +32,33 @@ settings = get_settings()
 
 app = FastAPI(title="sqlguard-llm")
 
+APP_DIR = Path(__file__).resolve().parent
+app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=APP_DIR / "templates")
+
 HEALTH_CONNECT_TIMEOUT_S = 3
 MAX_LIST_LIMIT = 200
+
+# Everything the UI shows (question, SQL, rows, error text) is untrusted. The UI only ever sets
+# textContent; this CSP is the second layer: no inline script, nothing from other origins.
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; "
+        "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; "
+        "frame-ancestors 'none'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+}
+
+
+@app.middleware("http")
+async def security_headers(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    response = await call_next(request)
+    response.headers.update(SECURITY_HEADERS)
+    return response
 
 
 # --- request / response models ------------------------------------------------------------------
@@ -135,6 +164,26 @@ def get_runner() -> Runner:
 
 RunnerDep = Annotated[Runner, Depends(get_runner)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+
+
+# --- UI -------------------------------------------------------------------------------------------
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def index(request: Request, current: SettingsDep) -> HTMLResponse:
+    # Badge cutoffs and limits come from config (TOKENS.md), rendered as JSON data, never code.
+    config = {
+        "confidenceThreshold": current.confidence_threshold,
+        "confidenceHigh": current.confidence_high,
+        "maxQuestionChars": current.max_question_chars,
+        "weights": {
+            "judge": current.score_weight_judge,
+            "consistency": current.score_weight_consistency,
+            "repairs": current.score_weight_repairs,
+            "sanity": current.score_weight_sanity,
+        },
+    }
+    return templates.TemplateResponse(request, "index.html", {"config": config})
 
 
 # --- API ------------------------------------------------------------------------------------------
