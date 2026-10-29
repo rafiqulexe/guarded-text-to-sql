@@ -502,3 +502,25 @@ def test_input_check_language_and_clean_questions() -> None:
         "Which rentals were not returned?",
     ]:
         assert input_check(question, 1000)[1] == [], question
+
+
+async def test_default_judge_uses_the_judge_model_through_the_same_client(
+    clean_runs: sessionmaker[Session], reader_url: str
+) -> None:
+    verdict = JudgeVerdict(verdict="yes", expects_rows=True, reason="counts PG films")
+    client = FakeClient(ok(GOOD), ok(GOOD), verdict)  # type: ignore[arg-type]
+    settings = get_settings()
+    runner = Runner(
+        client=client,
+        scorer=scorer(0.95),
+        settings=settings,
+        sessions=clean_runs,
+        conninfo=reader_url,
+    )
+    outcome = await runner.ask("How many PG films?")
+    assert outcome.status == "SUCCEEDED"
+    judge_call = client.calls[-1]
+    assert (judge_call["schema"], judge_call["model"]) == (JudgeVerdict, settings.judge_model)
+    assert "<rows" in judge_call["user"] and "194" in judge_call["user"]
+    row, _ = stored(clean_runs, outcome.run_id)
+    assert (row.judge_model, row.judge_verdict) == (settings.judge_model, "yes")

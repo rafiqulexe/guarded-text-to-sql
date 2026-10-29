@@ -10,7 +10,7 @@ import asyncio
 import re
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -32,10 +32,10 @@ from app.pipeline.consistency import (
     LLMCall,
     run_self_consistency,
 )
-from app.pipeline.llm import LLMClient, LLMError, LLMResponse
+from app.pipeline.llm import LLMClient, LLMError
 from app.pipeline.result import GuardResult, Outcome, Severity, Stage, blocked, passed
 from app.pipeline.score import ScoreInputs, ScoreResult
-from app.pipeline.validate import JudgeVerdict
+from app.pipeline.validate import JudgeFn, make_judge
 
 TERMINAL = frozenset({"SUCCEEDED", "BLOCKED", "FAILED", "CANCELLED", "UNANSWERABLE"})
 
@@ -77,9 +77,6 @@ INJECTION_MARKERS = [
 ]
 _BANGLA = re.compile(r"[ঀ-৿]")
 
-JudgeFn = Callable[
-    [str, str, tuple[str, ...], tuple[tuple[Any, ...], ...]], Awaitable[LLMResponse[JudgeVerdict]]
-]
 ScoreFn = Callable[[ScoreInputs], ScoreResult]
 
 
@@ -216,16 +213,17 @@ class Runner:
         self,
         *,
         client: LLMClient,
-        judge: JudgeFn,
         scorer: ScoreFn,
+        judge: JudgeFn | None = None,
         settings: Settings | None = None,
         sessions: sessionmaker[Session] | None = None,
         allowlist: Allowlist | None = None,
         conninfo: str | None = None,
         executor: Executor | None = None,
     ) -> None:
-        self.client, self.judge, self.scorer = client, judge, scorer
+        self.client, self.scorer = client, scorer
         self.settings = settings or get_settings()
+        self.judge: JudgeFn = judge or make_judge(client, self.settings.judge_model)
         self.sessions = sessions or get_sessionmaker()
         self.allowlist = allowlist or load_allowlist()
         self.conninfo = conninfo
