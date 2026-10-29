@@ -4,6 +4,7 @@
     uv run python scripts/live_llm_check.py context   # PLAN 3.1: schema context token count
     uv run python scripts/live_llm_check.py generate  # PLAN 3.2: weather -> answerable=false
     uv run python scripts/live_llm_check.py repair    # PLAN 3.3: error fed back, re-guarded
+    uv run python scripts/live_llm_check.py consistency  # PLAN 3.4: 5 manual questions (2 Bangla)
 
 Unit tests never call an LLM (the client is mocked); this script is the only place that does.
 """
@@ -20,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.allowlist import load_allowlist
 from app.config import get_settings
 from app.pipeline import ast_guard, dry_run, rewrite, schema_guard
+from app.pipeline.consistency import CandidateRecord, run_self_consistency
 from app.pipeline.generate import generate, render_generate_prompt, repair
 from app.pipeline.llm import make_client
 from app.pipeline.result import GuardResult, Outcome
@@ -161,11 +163,67 @@ async def check_repair() -> None:
             print(f"   reason: {c.unanswerable_reason}")
 
 
+MANUAL_QUESTIONS = [
+    "Who are the top 5 customers by total payment amount?",
+    "How many rentals were made in the last 30 days?",
+    "Which film category brought in the most rental revenue?",
+    "কোন অভিনেতা সবচেয়ে বেশি ফিল্মে অভিনয় করেছেন?",  # Which actor appeared in the most films?
+    "প্রতিটি দোকানে কতগুলো ফিল্মের কপি আছে?",  # How many film copies does each store have?
+]
+
+
+def _guard_summary(record: CandidateRecord) -> str:
+    if record.dropped and record.guards is None:
+        return f"dropped ({record.dropped}): {record.error or ''}"
+    if record.guards is None:
+        return "not checked"
+    stages = " -> ".join(f"{e.stage}:{e.outcome}" for e in record.guards.events)
+    tail = f" | dropped ({record.dropped}): {record.error}" if record.dropped else ""
+    return stages + tail
+
+
+async def check_consistency() -> None:
+    """PLAN 3.4 acceptance: 5 manual questions (2 Bangla) -> valid SQL via self-consistency."""
+    settings = get_settings()
+    client = make_client(settings)
+    assert settings.reference_date is not None, "set REFERENCE_DATE in .env"
+    valid = 0
+    for question in MANUAL_QUESTIONS:
+        result = await run_self_consistency(
+            question,
+            client=client,
+            model=settings.gen_model,
+            reference_date=settings.reference_date,
+            n=settings.self_consistency_n,
+            max_repairs=settings.max_repairs,
+        )
+        print(f"\nQ: {question}")
+        for c in result.candidates:
+            label = f"repair of #{c.index}" if c.repaired_from is not None else f"#{c.index}"
+            via = f" (fallback from {c.fallback_from})" if c.fallback_from else ""
+            print(f"   {label} t={c.temperature} model={c.model}{via}")
+            print(f"      SQL: {' '.join((c.sql or '-').split())}")
+            print(f"      guards: {_guard_summary(c)}")
+        print(f"   => {result.next_state}: {result.detail}")
+        if result.next_state == "VALIDATING" and result.primary is not None:
+            valid += 1
+            print(f"   final SQL: {result.primary.final_sql}")
+            print(
+                f"   consistency={result.consistency:.2f} repairs={result.repairs_used} "
+                f"columns={list(result.columns)} rows={len(result.rows)}"
+                f" first={list(result.rows[:3])}"
+            )
+    print(
+        f"\n{valid}/{len(MANUAL_QUESTIONS)} questions produced SQL that passed every guard and ran"
+    )
+
+
 CHECKS: dict[str, Callable[[], Awaitable[None]]] = {
     "client": check_client,
     "context": check_context,
     "generate": check_generate,
     "repair": check_repair,
+    "consistency": check_consistency,
 }
 
 
