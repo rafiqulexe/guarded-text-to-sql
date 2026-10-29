@@ -11,8 +11,9 @@ Unit tests never call an LLM (the client is mocked); this script is the only pla
 
 import asyncio
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -218,7 +219,7 @@ async def check_consistency() -> None:
     )
 
 
-CHECKS: dict[str, Callable[[], Awaitable[None]]] = {
+CHECKS: dict[str, Callable[[], Coroutine[Any, Any, None]]] = {
     "client": check_client,
     "context": check_context,
     "generate": check_generate,
