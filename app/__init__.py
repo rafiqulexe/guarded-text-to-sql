@@ -1,1 +1,1 @@
-"""sqlguard-llm: text-to-SQL with guardrails."""
+"""guarded-text-to-sql: text-to-SQL with guardrails."""
