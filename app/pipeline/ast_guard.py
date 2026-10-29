@@ -18,15 +18,20 @@ from app.pipeline.result import GuardResult, Stage, blocked, passed, repair
 DIALECT = "postgres"
 STAGE = Stage.AST_CHECK
 
-# SQL syntax that sqlglot models as function nodes but that is not a function call:
-# CASE/WHEN, ARRAY[...] / ARRAY(subquery), EXISTS (subquery), and binary operators
-# (AND, OR, @>, COLLATE, ...). Every other function node must be on the allowlist.
+# SQL syntax that sqlglot models as function nodes but that is not a function call. Exact
+# classes only, never a base class: many sqlglot "operator" classes are real function calls
+# (corr(), array_position(), POWER()). Their arguments are still checked. Every other
+# function node must be on the allowlist.
 SYNTAX_NODES: tuple[type[exp.Expr], ...] = (
-    exp.Case,
-    exp.If,
-    exp.Array,
-    exp.Exists,
-    exp.Binary,
+    exp.Case,  # CASE ... END
+    exp.If,  # a WHEN ... THEN branch, exempt only directly inside CASE
+    exp.Array,  # ARRAY[...] / ARRAY(subquery)
+    exp.Exists,  # EXISTS (subquery)
+    exp.And,  # AND
+    exp.Or,  # OR
+    exp.ArrayContainsAll,  # @>   (special_features text[])
+    exp.ArrayContainedBy,  # <@
+    exp.ArrayOverlaps,  # &&
 )
 
 # Statement types that may never appear anywhere in the tree.
@@ -117,7 +122,7 @@ def _check_shape(tree: exp.Expr, allowlist: Allowlist) -> GuardResult | None:
 
 def _check_functions(tree: exp.Expr, allowlist: Allowlist) -> GuardResult | None:
     for node in tree.find_all(exp.Func):
-        if isinstance(node, SYNTAX_NODES):
+        if _is_syntax(node):
             continue
         if isinstance(node.parent, exp.Dot) and node.parent.expression is node:
             return blocked(
@@ -161,6 +166,13 @@ def _normalized(identifier: exp.Expr) -> str:
     if isinstance(identifier, exp.Identifier) and identifier.quoted:
         return identifier.name
     return identifier.name.lower()
+
+
+def _is_syntax(node: exp.Func) -> bool:
+    if type(node) not in SYNTAX_NODES:  # exact type: subclasses are not exempt
+        return False
+    # IF(a, b, c) on its own is a function call; it is only syntax as a CASE branch.
+    return not isinstance(node, exp.If) or isinstance(node.parent, exp.Case)
 
 
 def _rendered_name(node: exp.Func) -> str | None:

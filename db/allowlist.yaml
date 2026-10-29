@@ -164,6 +164,8 @@ tables:
     restricted: [password, username, email, picture]
 
 # Function allowlist for AST_CHECK: any other function call is BLOCKED.
+# Names are matched as executed (now() runs as current_timestamp). SQL syntax needs no entry:
+# CASE, ARRAY[...], EXISTS, AND, OR, @>, <@, && (SYNTAX_NODES in app/pipeline/ast_guard.py).
 functions: [count, sum, avg, min, max, round, coalesce, nullif, lower, upper,
             length, trim, concat, date_trunc, extract, date_part, now, current_timestamp, current_date,
             to_char, cast]

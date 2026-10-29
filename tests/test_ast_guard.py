@@ -236,3 +236,88 @@ def test_function_name_is_checked_as_executed() -> None:
     )
     assert ast_guard.check("SELECT now()").passed
     assert not ast_guard.check("SELECT now()", no_current_timestamp).passed
+
+
+# --- syntax-exempt constant: small, explicit, and never a free pass for its contents ------
+
+
+def test_syntax_exempt_list_is_exactly_this() -> None:
+    """Pinned so that widening the exemption is always a deliberate, reviewed change."""
+    assert set(ast_guard.SYNTAX_NODES) == {
+        exp.Case,
+        exp.If,
+        exp.Array,
+        exp.Exists,
+        exp.And,
+        exp.Or,
+        exp.ArrayContainsAll,
+        exp.ArrayContainedBy,
+        exp.ArrayOverlaps,
+    }
+    assert len(ast_guard.SYNTAX_NODES) == len(set(ast_guard.SYNTAX_NODES))
+    assert exp.Binary not in ast_guard.SYNTAX_NODES and exp.Func not in ast_guard.SYNTAX_NODES
+
+
+SYNTAX_EXAMPLES = [
+    ("CASE / WHEN", "SELECT CASE WHEN length > 120 THEN 'long' ELSE 'short' END FROM film"),
+    ("ARRAY[...]", "SELECT ARRAY['a', 'b']"),
+    ("ARRAY(subquery)", "SELECT ARRAY(SELECT title FROM film)"),
+    ("EXISTS", "SELECT 1 WHERE EXISTS (SELECT 1 FROM film)"),
+    ("AND / OR", "SELECT title FROM film WHERE (length > 60 AND rating = 'G') OR length < 50"),
+    ("@>", "SELECT title FROM film WHERE special_features @> ARRAY['Trailers']"),
+    ("<@", "SELECT title FROM film WHERE special_features <@ ARRAY['Trailers']"),
+    ("&&", "SELECT title FROM film WHERE special_features && ARRAY['Trailers']"),
+]
+
+
+@pytest.mark.parametrize(
+    "sql", [s for _, s in SYNTAX_EXAMPLES], ids=[n for n, _ in SYNTAX_EXAMPLES]
+)
+def test_each_exempt_construct_is_allowed(sql: str) -> None:
+    result = ast_guard.check(sql)
+    assert result.passed, result.detail
+
+
+# sqlglot models these as "operators" too, but they are function calls (or render as one).
+FUNCTION_LIKE_OPERATORS = [
+    "SELECT corr(rental_rate, length) FROM film",
+    "SELECT array_position(special_features, 'Trailers') FROM film",
+    "SELECT 2 ^ 3",  # renders as POWER(2, 3)
+    "SELECT if(true, 1, 2)",  # IF() outside CASE is a function call
+    'SELECT title COLLATE "C" FROM film',
+]
+
+
+@pytest.mark.parametrize("sql", FUNCTION_LIKE_OPERATORS)
+def test_function_like_operators_are_not_exempt(sql: str) -> None:
+    assert _check(sql) == (Outcome.BLOCKED, "function_not_allowed")
+
+
+HIDDEN_BANNED = [
+    # inside CASE: condition, THEN, ELSE, nested CASE
+    "SELECT CASE WHEN pg_sleep(10) IS NULL THEN 1 ELSE 0 END",
+    "SELECT CASE WHEN length > 60 THEN pg_read_file('/etc/passwd') END FROM film",
+    "SELECT CASE WHEN length > 60 THEN 'x' ELSE film_in_stock(1, 1)::text END FROM film",
+    "SELECT CASE WHEN true THEN CASE WHEN false THEN 1 ELSE pg_sleep(1)::int END END",
+    "SELECT title FROM film ORDER BY CASE WHEN pg_sleep(1) IS NULL THEN 1 END",
+    # inside the other exempt constructs
+    "SELECT ARRAY[pg_sleep(10)]",
+    "SELECT ARRAY(SELECT pg_read_file('/etc/passwd'))",
+    "SELECT 1 WHERE EXISTS (SELECT pg_sleep(10))",
+    "SELECT title FROM film WHERE length > 60 AND pg_sleep(1) IS NOT NULL",
+    "SELECT title FROM film WHERE length > 60 OR pg_sleep(1) IS NOT NULL",
+    "SELECT title FROM film WHERE special_features @> ARRAY[current_setting('data_directory')]",
+    "SELECT title FROM film WHERE special_features && ARRAY[pg_read_file('/etc/passwd')]",
+    # inside a set-operation branch (first, second, nested, INTERSECT/EXCEPT)
+    "SELECT pg_sleep(10) UNION SELECT 1",
+    "SELECT title FROM film UNION ALL SELECT pg_read_file('/etc/passwd')",
+    "SELECT title FROM film UNION SELECT title FROM film UNION SELECT dblink('x', 'y')::text",
+    "SELECT film_id FROM film INTERSECT SELECT film_in_stock(1, 1)",
+    "SELECT film_id FROM film EXCEPT SELECT CASE WHEN pg_sleep(1) IS NULL THEN 1 END",
+    "(SELECT title FROM film) UNION (SELECT CASE WHEN true THEN pg_read_file('/x') END)",
+]
+
+
+@pytest.mark.parametrize("sql", HIDDEN_BANNED)
+def test_banned_function_hidden_in_syntax_or_set_branch_is_blocked(sql: str) -> None:
+    assert _check(sql) == (Outcome.BLOCKED, "function_not_allowed")
