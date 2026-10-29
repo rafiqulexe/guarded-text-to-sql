@@ -32,7 +32,7 @@ from app.pipeline.generate import (
 )
 from app.pipeline.generate import repair as repair_sql
 from app.pipeline.llm import LLMClient, LLMError, LLMResponse
-from app.pipeline.result import GuardResult, Outcome
+from app.pipeline.result import GuardResult, Outcome, Stage
 
 NextState = Literal["VALIDATING", "BLOCKED", "FAILED", "UNANSWERABLE"]
 Dropped = Literal["unanswerable", "llm_error", "repair", "execution_failed"]
@@ -74,12 +74,40 @@ def result_hash(rows: Sequence[Sequence[Any]], *, order_insensitive_cols: bool =
     return hashlib.sha256(json.dumps(normalised).encode()).hexdigest()
 
 
-# --- one candidate through the guards -------------------------------------------------------------
+# --- hooks: how the runner sees each state, guard event and LLM call ----------------------------
+
+
+@dataclass(frozen=True)
+class Hooks:
+    """Callbacks for the runner (persistence). Defaults do nothing."""
+
+    on_state: Callable[[str, str], None] = lambda state, detail: None
+    on_event: Callable[[GuardResult, "CandidateRecord", str], None] = lambda e, r, sql: None
+    on_llm: Callable[["LLMCall"], None] = lambda call: None
+
+
+@dataclass(frozen=True)
+class LLMCall:
+    """One generation or repair call: what was asked, which model answered, what it cost."""
+
+    purpose: Literal["generate", "repair"]
+    candidate: int
+    requested_model: str
+    response: LLMResponse[SqlCandidate] | None = None
+    error: LLMError | None = None
+
+
+NO_HOOKS = Hooks()
+
+GUARD_STAGES = (Stage.AST_CHECK, Stage.SCHEMA_CHECK, Stage.REWRITING, Stage.DRY_RUN)
+
+
+# --- candidates through the guards, one stage at a time -------------------------------------------
 
 
 @dataclass
 class GuardRun:
-    """AST_CHECK -> SCHEMA_CHECK -> REWRITING -> DRY_RUN for one SQL string."""
+    """AST_CHECK -> SCHEMA_CHECK -> REWRITING -> DRY_RUN results for one candidate."""
 
     events: list[GuardResult]
     outcome: Outcome
@@ -91,25 +119,76 @@ class GuardRun:
         return None if self.outcome is Outcome.PASSED else self.events[-1]
 
 
+def _step(stage: Stage, value: Any, conninfo: str | None) -> tuple[GuardResult, Any]:
+    """Run one guard stage; returns (result, input for the next stage)."""
+    if stage is Stage.AST_CHECK:
+        ast = ast_guard.check(value)
+        return ast, ast.expression
+    if stage is Stage.SCHEMA_CHECK:
+        schema = schema_guard.check(value)
+        return schema, schema.expression
+    if stage is Stage.REWRITING:
+        rewritten = rewrite.rewrite(value)
+        return rewritten, rewritten
+    plan = dry_run.dry_run(value.sql, conninfo=conninfo)
+    return plan, value
+
+
+def _guard_stagewise(
+    records: list["CandidateRecord"],
+    conninfo: str | None,
+    events: list[GuardResult],
+    hooks: Hooks,
+) -> GuardResult | None:
+    """All candidates through each guard stage in turn (so the run's state moves forward only).
+    Returns the BLOCKED event as soon as any candidate is blocked, else None."""
+    work: dict[int, Any] = {}
+    for record in records:
+        record.guards = GuardRun([], Outcome.PASSED)
+        work[id(record)] = record.sql or ""  # empty SQL -> AST_CHECK empty_sql (repair)
+    for stage in GUARD_STAGES:
+        live = [r for r in records if r.guards is not None and r.guards.outcome is Outcome.PASSED]
+        if not live:
+            break
+        hooks.on_state(stage, f"{len(live)} candidate(s)")
+        for record in live:
+            assert record.guards is not None
+            result, next_value = _step(stage, work[id(record)], conninfo)
+            snapshot = work[id(record)].sql if stage is Stage.DRY_RUN else (record.sql or "")
+            if stage is Stage.REWRITING and isinstance(result, rewrite.RewriteResult):
+                snapshot = result.sql or snapshot
+            record.guards.events.append(result)
+            events.append(result)
+            hooks.on_event(result, record, snapshot)
+            if result.outcome is Outcome.BLOCKED:
+                record.guards.outcome = Outcome.BLOCKED
+                return result
+            if not result.passed or next_value is None:
+                record.guards.outcome = result.outcome
+                continue
+            work[id(record)] = next_value
+    for record in records:
+        assert record.guards is not None
+        if record.guards.outcome is Outcome.PASSED:
+            rewritten = work[id(record)]
+            assert isinstance(rewritten, rewrite.RewriteResult)
+            record.guards.final_sql, record.guards.limit_applied = (
+                rewritten.sql,
+                rewritten.limit_applied,
+            )
+            record.final_sql, record.limit_applied = rewritten.sql, rewritten.limit_applied
+            record.limit = rewritten.limit
+    return None
+
+
 def guard_sql(sql: str, *, conninfo: str | None = None) -> GuardRun:
-    events: list[GuardResult] = []
-    ast = ast_guard.check(sql)
-    events.append(ast)
-    if not ast.passed or ast.expression is None:
-        return GuardRun(events, ast.outcome)
-    schema = schema_guard.check(ast.expression)
-    events.append(schema)
-    if not schema.passed or schema.expression is None:
-        return GuardRun(events, schema.outcome)
-    rewritten = rewrite.rewrite(schema.expression)
-    events.append(rewritten)
-    if not rewritten.passed:
-        return GuardRun(events, rewritten.outcome)
-    plan = dry_run.dry_run(rewritten.sql, conninfo=conninfo)
-    events.append(plan)
-    if not plan.passed:
-        return GuardRun(events, plan.outcome)
-    return GuardRun(events, Outcome.PASSED, rewritten.sql, rewritten.limit_applied)
+    """Every guard for one SQL string (e.g. for scripts)."""
+    record = CandidateRecord(
+        1, PRIMARY_TEMPERATURE, candidate=SqlCandidate(answerable=True, sql=sql)
+    )
+    _guard_stagewise([record], conninfo, [], NO_HOOKS)
+    assert record.guards is not None
+    return record.guards
 
 
 # --- records --------------------------------------------------------------------------------------
@@ -126,6 +205,7 @@ class CandidateRecord:
     guards: GuardRun | None = None
     final_sql: str = ""
     limit_applied: bool = False
+    limit: int = 0  # outer LIMIT after REWRITING
     result_hash: str | None = None
     execution: execute.ExecResult | None = None
     dropped: Dropped | None = None
@@ -195,6 +275,7 @@ async def run_self_consistency(
     allowlist: Allowlist | None = None,
     conninfo: str | None = None,
     executor: Executor | None = None,
+    hooks: Hooks = NO_HOOKS,
 ) -> ConsistencyResult:
     if n < 1:
         raise ValueError("need at least one candidate")
@@ -206,7 +287,8 @@ async def run_self_consistency(
     ]
     out = ConsistencyResult("FAILED", "", records)
 
-    # 1. N candidates in parallel.
+    # 1. GENERATING: N candidates in parallel.
+    hooks.on_state("GENERATING", f"{n} candidate(s)")
     responses = await asyncio.gather(
         *(
             generate(
@@ -224,10 +306,12 @@ async def run_self_consistency(
     for record, response in zip(records, responses, strict=True):
         if isinstance(response, LLMError):
             record.llm_error, record.dropped = f"LLM: {response}", "llm_error"
+            hooks.on_llm(LLMCall("generate", record.index, model, error=response))
         elif isinstance(response, BaseException):
             raise response
         else:
             _take(record, response, out)
+            hooks.on_llm(LLMCall("generate", record.index, model, response=response))
 
     # 2. answerable: candidate #1 decides (or the first candidate whose call returned).
     answered = [r for r in records if r.candidate is not None]
@@ -243,45 +327,53 @@ async def run_self_consistency(
             record.dropped = "unanswerable"
 
     # 3. every remaining candidate through every guard; any BLOCKED blocks the run.
-    for record in answered:
-        if record.dropped is None:
-            _guard(record, conninfo, out)
-    blocked_record = next(
-        (r for r in records if r.guards and r.guards.outcome is Outcome.BLOCKED), None
-    )
-    if blocked_record:
-        assert blocked_record.guards is not None
-        return _block(out, blocked_record.guards.events[-1], f"candidate #{blocked_record.index}")
-    for record in records:
-        if record.guards and record.guards.outcome is not Outcome.PASSED and record.dropped is None:
+    checked = [r for r in answered if r.dropped is None]
+    blocking = _guard_stagewise(checked, conninfo, out.events, hooks)
+    if blocking is not None:
+        where = next(r.index for r in checked if r.guards and r.guards.outcome is Outcome.BLOCKED)
+        return _block(out, blocking, f"candidate #{where}")
+    for record in checked:
+        if record.guards and record.guards.outcome is not Outcome.PASSED:
             record.dropped = (
                 "repair" if record.guards.outcome is Outcome.REPAIR else "execution_failed"
             )
-
-    survivors = [r for r in records if r.guards and r.guards.outcome is Outcome.PASSED]
+    survivors = [r for r in checked if r.guards and r.guards.outcome is Outcome.PASSED]
 
     # 4. nothing survived: repair candidate #1 (or the first repairable one).
     if not survivors:
-        target = next((r for r in records if r.guards and r.guards.outcome is Outcome.REPAIR), None)
+        target = next((r for r in checked if r.guards and r.guards.outcome is Outcome.REPAIR), None)
         if target is None:
             return _end(out, "FAILED", "no candidate survived the guards")
         repaired = await _repair_loop(
-            question, target, client, model, reference_date, allowlist, conninfo, max_repairs, out
+            question,
+            target,
+            client,
+            model,
+            reference_date,
+            allowlist,
+            conninfo,
+            max_repairs,
+            out,
+            hooks=hooks,
         )
         if repaired is None:
             return out
         survivors = [repaired]
 
-    # 5. execute every survivor; the primary is #1 if it survived, else the first survivor.
+    # 5. EXECUTING every survivor; the primary is #1 if it survived, else the first survivor.
     primary = survivors[0]
+    hooks.on_state("EXECUTING", f"{len(survivors)} survivor(s)")
     executions = await asyncio.gather(
         *(asyncio.to_thread(run_exec, r.final_sql) for r in survivors)
     )
     for record, result in zip(survivors, executions, strict=True):
         record.execution = result
         out.events.append(result)
-        if result.outcome is Outcome.BLOCKED:
-            return _block(out, result, f"candidate #{record.index} at execution")
+        hooks.on_event(result, record, record.final_sql)
+    for record in survivors:
+        assert record.execution is not None
+        if record.execution.outcome is Outcome.BLOCKED:
+            return _block(out, record.execution, f"candidate #{record.index} at execution")
     for record in survivors:
         ran = record.execution
         assert ran is not None
@@ -307,6 +399,7 @@ async def run_self_consistency(
             max_repairs,
             out,
             run_exec=run_exec,
+            hooks=hooks,
         )
         if repaired is None:
             return out
@@ -334,9 +427,11 @@ async def _repair_loop(
     out: ConsistencyResult,
     *,
     run_exec: Executor | None = None,
+    hooks: Hooks = NO_HOOKS,
 ) -> CandidateRecord | None:
     """Repair `target` until a version passes the guards (and, if `run_exec`, executes).
-    Returns the new record, or None after setting out.next_state (BLOCKED / FAILED)."""
+    Returns the new record, or None after setting out.next_state (BLOCKED / FAILED / UNANSWERABLE).
+    """
     current = target
     while out.repairs_used < max_repairs:
         failure = _failure_of(current)
@@ -344,6 +439,7 @@ async def _repair_loop(
         out.repairs_used += 1
         record = CandidateRecord(current.index, PRIMARY_TEMPERATURE, repaired_from=previous_sql)
         out.candidates.append(record)
+        hooks.on_state("GENERATING", f"repair {out.repairs_used}/{max_repairs} of #{record.index}")
         try:
             response = await repair_sql(
                 question,
@@ -356,25 +452,29 @@ async def _repair_loop(
             )
         except LLMError as exc:
             record.llm_error = f"LLM: {exc}"
+            hooks.on_llm(LLMCall("repair", record.index, model, error=exc))
             _end(out, "FAILED", f"repair call failed: {exc}")
             return None
         _take(record, response, out)
+        hooks.on_llm(LLMCall("repair", record.index, model, response=response))
         assert record.candidate is not None
         if not record.candidate.answerable:
             out.unanswerable_reason = record.candidate.unanswerable_reason
             _end(out, "UNANSWERABLE", f"after repair: {out.unanswerable_reason}")
             return None
-        _guard(record, conninfo, out)
+        blocking = _guard_stagewise([record], conninfo, out.events, hooks)
         assert record.guards is not None
-        if record.guards.outcome is Outcome.BLOCKED:
-            _block(out, record.guards.events[-1], f"repair of candidate #{record.index}")
+        if blocking is not None:
+            _block(out, blocking, f"repair of candidate #{record.index}")
             return None
         if record.guards.outcome is Outcome.PASSED:
             if run_exec is None:
                 return record
+            hooks.on_state("EXECUTING", f"repaired candidate #{record.index}")
             result = await asyncio.to_thread(run_exec, record.final_sql)
             record.execution = result
             out.events.append(result)
+            hooks.on_event(result, record, record.final_sql)
             if result.passed:
                 record.result_hash = result_hash(result.rows)
                 return record
@@ -406,14 +506,6 @@ def _take(
     record.fallback_from = response.fallback_from
     out.input_tokens += response.input_tokens
     out.output_tokens += response.output_tokens
-
-
-def _guard(record: CandidateRecord, conninfo: str | None, out: ConsistencyResult) -> None:
-    run = guard_sql(
-        record.sql or "", conninfo=conninfo
-    )  # empty SQL -> AST_CHECK empty_sql (repair)
-    record.guards, record.final_sql, record.limit_applied = run, run.final_sql, run.limit_applied
-    out.events.extend(run.events)
 
 
 def _block(out: ConsistencyResult, event: GuardResult, where: str) -> ConsistencyResult:

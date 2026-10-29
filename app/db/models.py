@@ -48,6 +48,10 @@ class QueryRun(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Ordered state history: [{state, at, detail}] (every transition, STATE.md rule 5).
+    transitions: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
 
     guard_events: Mapped[list["GuardEvent"]] = relationship(
         back_populates="run", order_by="GuardEvent.id", passive_deletes=True

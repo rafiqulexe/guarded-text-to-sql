@@ -7,11 +7,13 @@ from sqlglot import exp
 
 
 class Stage(StrEnum):
+    INPUT_CHECK = "INPUT_CHECK"
     AST_CHECK = "AST_CHECK"
     SCHEMA_CHECK = "SCHEMA_CHECK"
     REWRITING = "REWRITING"
     DRY_RUN = "DRY_RUN"
     EXECUTING = "EXECUTING"
+    VALIDATING = "VALIDATING"
 
 
 class Outcome(StrEnum):
