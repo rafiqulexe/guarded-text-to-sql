@@ -1,4 +1,4 @@
-"""DB-level backstop: what `sqlguard_reader` can and cannot do (SCHEMA.md §2).
+"""DB-level backstop: what `sqlguard_reader` can and cannot do.
 
 Needs the docker Postgres (`docker compose up -d`); skipped if it is not reachable.
 """
@@ -49,7 +49,7 @@ def _restricted() -> list[tuple[str, str]]:
 pytestmark = pytest.mark.db
 
 
-# --- the PLAN.md 1.3 checks ---------------------------------------------------
+# --- read-only role checks -----------------------------------------------------
 
 DENIED = [
     ("SELECT email FROM customer", errors.InsufficientPrivilege),

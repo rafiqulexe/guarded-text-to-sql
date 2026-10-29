@@ -1,4 +1,4 @@
-"""Compact schema prompt built from allowlist.yaml (PLAN 3.1)."""
+"""Compact schema prompt built from allowlist.yaml."""
 
 import re
 
@@ -71,5 +71,5 @@ def test_built_from_the_allowlist_not_hardcoded() -> None:
 
 
 def test_acceptance_prompt_context_under_2500_tokens() -> None:
-    """PLAN 3.1: conservative offline estimate; exact count: scripts/live_llm_check.py."""
+    """Conservative offline estimate; exact count: scripts/live_llm_check.py."""
     assert estimate_tokens(CONTEXT) < 2500

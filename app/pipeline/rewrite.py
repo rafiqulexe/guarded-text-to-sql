@@ -27,7 +27,7 @@ class RewriteResult(GuardResult):
 
     @property
     def limit_applied(self) -> bool:
-        """A LIMIT we set, so hitting it says nothing about the model (STATE.md §4 sanity)."""
+        """A LIMIT we set, so hitting it says nothing about the model (sanity rule)."""
         return self.limit_injected or self.limit_clamped
 
 

@@ -1,5 +1,5 @@
 """AST_CHECK (layer 1): parse, single statement, read-only query shape, function allowlist,
-system catalogs. Outcomes per STATE.md §5."""
+system catalogs."""
 
 import pytest
 import sqlglot
@@ -160,7 +160,7 @@ def test_blocked(sql: str, rule: str) -> None:
     assert _check(sql) == (Outcome.BLOCKED, rule)
 
 
-# --- repair (back to GENERATING, per STATE.md §5) --------------------------------
+# --- repair (back to GENERATING) --------------------------------
 
 REPAIR = [
     ("SELEC title FROM film", "parse_error"),

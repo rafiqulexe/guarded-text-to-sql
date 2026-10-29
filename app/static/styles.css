@@ -1,4 +1,4 @@
-/* sqlguard UI. Tokens from TOKENS.md: no color or size literal outside :root. */
+/* sqlguard UI. Design tokens live in :root; no color or size literal outside it. */
 
 :root {
   /* surfaces */

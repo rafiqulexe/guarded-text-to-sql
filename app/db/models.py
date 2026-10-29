@@ -48,7 +48,7 @@ class QueryRun(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Ordered state history: [{state, at, detail}] (every transition, STATE.md rule 5).
+    # Ordered state history: [{state, at, detail}] (every transition).
     transitions: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, default=list, server_default="[]"
     )

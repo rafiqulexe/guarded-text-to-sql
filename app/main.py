@@ -1,8 +1,8 @@
-"""FastAPI app and routes (STACK.md §6).
+"""FastAPI app and routes.
 
-Every route goes through the pipeline `Runner` (STATE.md); nothing here touches the target DB
+Every route goes through the pipeline `Runner`; nothing here touches the target DB
 except /health's connectivity probe. Rows are only ever returned by ask (SUCCEEDED) and confirm:
-they are never stored (STATE.md rule 4), so GET /api/runs/{id} has none.
+they are never stored, so GET /api/runs/{id} has none.
 """
 
 import datetime as dt
@@ -30,7 +30,7 @@ from app.pipeline.runner import IllegalTransition, Runner, RunOutcome
 
 settings = get_settings()
 
-app = FastAPI(title="sqlguard-llm")
+app = FastAPI(title="guarded-text-to-sql")
 
 APP_DIR = Path(__file__).resolve().parent
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
@@ -113,7 +113,7 @@ class RunDetail(BaseModel):
     status: str
     detail: str  # detail of the latest transition
     error: str | None
-    sql: str | None  # final SQL, or the SQL a guard stopped (always shown, CLAUDE.md rule 5)
+    sql: str | None  # final SQL, or the SQL a guard stopped (always shown)
     confidence: float | None
     breakdown: dict[str, float] | None
     judge_verdict: str | None
@@ -171,7 +171,7 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def index(request: Request, current: SettingsDep) -> HTMLResponse:
-    # Badge cutoffs and limits come from config (TOKENS.md), rendered as JSON data, never code.
+    # Badge cutoffs and limits come from config, rendered as JSON data, never code.
     config = {
         "confidenceThreshold": current.confidence_threshold,
         "confidenceHigh": current.confidence_high,

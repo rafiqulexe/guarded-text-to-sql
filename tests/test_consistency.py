@@ -1,4 +1,4 @@
-"""Self-consistency (STATE.md rule 8) with the real guards against the docker Postgres and a fake
+"""Self-consistency with the real guards against the docker Postgres and a fake
 LLM client (no key). Some cases also fake the executor to reach execution-time outcomes."""
 
 import datetime as dt
@@ -64,7 +64,7 @@ async def _run(
     )
 
 
-# --- result hash (SCHEMA.md §4) -------------------------------------------------------------------
+# --- result hash -------------------------------------------------------------------
 
 
 def test_hash_ignores_row_order_and_column_names() -> None:
@@ -319,7 +319,7 @@ async def test_primary_db_error_at_execution_goes_to_repair(reader_url: str) -> 
     assert result.primary is not None and "'R'" in result.primary.final_sql
 
 
-# --- logging shape (SCHEMA.md query_runs.candidates) ----------------------------------------------
+# --- logging shape (query_runs.candidates) ----------------------------------------------
 
 
 @pytest.mark.db

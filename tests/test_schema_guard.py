@@ -1,5 +1,5 @@
 """SCHEMA_CHECK (layer 2): every table/column must be allowlisted. Restricted (PII) columns are
-BLOCKED, never repaired; unknown references go back for repair (STATE.md §5, rule 10)."""
+BLOCKED, never repaired; unknown references go back for repair."""
 
 import pytest
 from sqlglot import exp
@@ -54,7 +54,7 @@ def test_allowed(sql: str) -> None:
     assert result.expression is not None
 
 
-# --- * expansion: allowlisted columns only (STATE.md rule 10) -------------------
+# --- * expansion: allowlisted columns only -------------------
 
 
 def test_select_star_from_customer_expands_without_email() -> None:

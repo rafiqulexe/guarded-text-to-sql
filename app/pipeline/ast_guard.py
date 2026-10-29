@@ -1,7 +1,7 @@
 """AST_CHECK (layer 1): sqlglot rules.
 
 Fail closed: anything that is not provably a single read-only SELECT is BLOCKED. Only a real
-parse error goes back to GENERATING (STATE.md §5). Later stages must execute SQL regenerated
+parse error goes back to GENERATING. Later stages must execute SQL regenerated
 from the returned tree, never the original text, so lexer tricks (nested comments, dollar
 quotes) can't make the DB see something different from what was checked.
 """

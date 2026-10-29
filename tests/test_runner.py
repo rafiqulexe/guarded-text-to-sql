@@ -1,4 +1,4 @@
-"""runner.py implements STATE.md: every terminal state, every transition persisted.
+"""runner.py implements the run state machine: every terminal state, every transition persisted.
 Real guards + target DB + app DB; the LLM client, judge and scorer are fakes (no key)."""
 
 import uuid

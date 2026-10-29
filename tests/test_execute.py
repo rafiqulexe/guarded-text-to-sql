@@ -41,7 +41,7 @@ def test_returns_columns_and_rows(reader_url: str) -> None:
 
 
 def test_select_star_customer_runs_without_touching_email(reader_url: str) -> None:
-    """STATE.md rule 10: the expanded * never reaches the DB permission layer on email."""
+    """The expanded * never reaches the DB permission layer on email."""
     result = _execute(_guarded("SELECT * FROM customer"), reader_url)
     assert result.passed, result.detail
     assert result.columns == tuple(load_allowlist().tables["customer"].columns)
@@ -67,7 +67,7 @@ def test_defaults_come_from_settings(reader_url: str) -> None:
     assert result.rows == ((1000,),)
 
 
-# --- timeout -> FAILED (STATE.md rule 3: not repaired) ------------------------------
+# --- timeout -> FAILED (not repaired) ------------------------------
 
 
 def test_timeout_is_failed(reader_url: str) -> None:

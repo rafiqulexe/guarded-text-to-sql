@@ -1,4 +1,4 @@
-"""Load prompt files from app/prompts/ (CLAUDE.md rule 8: prompts are files, not inline strings).
+"""Load prompt files from app/prompts/ (prompts are files, not inline strings).
 
 A prompt file has a `## system` and a `## user` section. Placeholders use `$name`
 (string.Template); a missing value is an error, never a silent blank.

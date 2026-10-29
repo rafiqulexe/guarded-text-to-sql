@@ -1,5 +1,5 @@
 """EXECUTING (layer 4): run guarded SQL as sqlguard_reader in a READ ONLY transaction with a
-local statement_timeout, then roll back. Also the DB error -> outcome mapping (STATE.md §5)
+local statement_timeout, then roll back. Also the DB error -> outcome mapping
 shared with DRY_RUN.
 """
 
@@ -70,7 +70,7 @@ def _from(result: GuardResult) -> ExecResult:
 
 @contextmanager
 def reader_transaction(conninfo: str, timeout_ms: int) -> Iterator[psycopg.Cursor[Any]]:
-    """BEGIN READ ONLY; SET LOCAL statement_timeout; ...; ROLLBACK (SCHEMA.md §2)."""
+    """BEGIN READ ONLY; SET LOCAL statement_timeout; ...; ROLLBACK."""
     with psycopg.connect(conninfo, connect_timeout=CONNECT_TIMEOUT_S) as conn:
         conn.read_only = True
         try:

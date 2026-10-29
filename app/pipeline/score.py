@@ -1,4 +1,4 @@
-"""Confidence scoring (SCORING, STATE.md §4). Weights come from config (SCORE_WEIGHT_*)."""
+"""Confidence scoring (the SCORING state). Weights come from config (SCORE_WEIGHT_*)."""
 
 from collections.abc import Callable
 from dataclasses import dataclass

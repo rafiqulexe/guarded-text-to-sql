@@ -1,4 +1,4 @@
-"""HTTP API (STACK.md §6) over httpx. Real guards + target DB + app DB; the LLM is always a fake."""
+"""HTTP API over httpx. Real guards + target DB + app DB; the LLM is always a fake."""
 
 import uuid
 from collections.abc import AsyncIterator, Callable

@@ -104,7 +104,7 @@ async def test_invalid_output_is_retried_once_then_fails() -> None:
     with pytest.raises(LLMError) as raised:
         await _ask(_gemini(fake, sleeps))
     assert raised.value.kind is ErrorKind.TRANSIENT
-    assert len(fake.calls) == 2  # first try + 1 retry (STATE.md)
+    assert len(fake.calls) == 2  # first try + 1 retry
 
 
 # --- gemini: 429 handling ---------------------------------------------------------------------

@@ -1,4 +1,4 @@
-"""Self-consistency (STATE.md rule 8): N candidates in parallel, every one through all the guards,
+"""Self-consistency: N candidates in parallel, every one through all the guards,
 result-hash comparison of the survivors.
 
 - Any BLOCKED candidate blocks the run (also a repaired one, and any permission error at execution).
@@ -7,10 +7,10 @@ result-hash comparison of the survivors.
 - Only when no candidate survives the guards does the repair path run, on candidate #1
   (or the first repairable candidate), up to MAX_REPAIRS. Repairs only ever apply to the primary:
   a repairable DB error when the primary executes is repaired the same way; a primary timeout is
-  FAILED (STATE.md rule 3).
+  FAILED.
 - consistency = survivors whose result_hash equals the primary's / N.
 
-`next_state` uses STATE.md names: VALIDATING (go on), BLOCKED, FAILED, UNANSWERABLE.
+`next_state` uses run state names: VALIDATING (go on), BLOCKED, FAILED, UNANSWERABLE.
 """
 
 import asyncio
@@ -39,7 +39,7 @@ Dropped = Literal["unanswerable", "llm_error", "repair", "execution_failed"]
 Executor = Callable[[str], execute.ExecResult]
 
 
-# --- result hash (SCHEMA.md §4) -----------------------------------------------------------------
+# --- result hash -----------------------------------------------------------------
 
 
 def _normalise(value: Any) -> Any:

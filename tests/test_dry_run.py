@@ -98,7 +98,7 @@ def test_unknown_column_goes_to_repair(reader_url: str) -> None:
 
 
 def test_permission_error_is_a_critical_block(reader_url: str) -> None:
-    """InsufficientPrivilege means layers 1-2 leaked (STATE.md §5)."""
+    """InsufficientPrivilege means layers 1-2 leaked."""
     result = _dry_run("SELECT email FROM customer LIMIT 10", reader_url)
     assert (result.outcome, result.rule) == (Outcome.BLOCKED, "insufficient_privilege")
     assert result.severity is Severity.CRITICAL

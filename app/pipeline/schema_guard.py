@@ -6,7 +6,7 @@ Two qualify passes over a copy of the AST_CHECK tree:
    reaches a restricted column is BLOCKED; so is a whole-row reference (`SELECT c FROM customer c`),
    which would read every column.
 2. against allowed columns only: unknown tables/columns go back for repair, and `*` expands to
-   allowlisted columns (STATE.md rule 10). The returned tree is what REWRITING emits.
+   allowlisted columns. The returned tree is what REWRITING emits.
 """
 
 from typing import Any

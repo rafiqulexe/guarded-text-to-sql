@@ -4,7 +4,7 @@ generate / repair / validate depend only on `LLMClient.structured()`; which prov
 config (LLM_PROVIDER). The model only ever returns text parsed into a Pydantic model; it never
 touches the database.
 
-Retry policy (STATE.md GENERATING / VALIDATING -> FAILED):
+Retry policy (GENERATING / VALIDATING -> FAILED):
 - rate limited (429) or overloaded: retried up to LLM_MAX_RETRIES with exponential backoff,
   or the server's retry delay when it gives one;
 - other transient errors (5xx, network, unparseable output): 1 retry;
@@ -36,7 +36,7 @@ from app.config import LLMSettings, get_llm_settings
 
 log = structlog.get_logger(__name__)
 
-TRANSIENT_RETRIES = 1  # STATE.md: API error after 1 retry -> FAILED
+TRANSIENT_RETRIES = 1  # API error after 1 retry -> FAILED
 BACKOFF_INITIAL_S = 2.0
 MAX_OUTPUT_TOKENS = 8192  # thinking models spend part of this before answering
 

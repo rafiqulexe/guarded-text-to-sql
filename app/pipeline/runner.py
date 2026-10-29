@@ -1,8 +1,8 @@
-"""State machine for a query run (STATE.md), persisted to the app DB.
+"""State machine for a query run, persisted to the app DB.
 
 Every transition updates `query_runs.status`, `updated_at` and the ordered `transitions` history;
 every guard result writes a `guard_events` row (one per candidate per guard stage). Transitions
-are checked against STATE.md §2: a terminal state can never be left, so e.g. BLOCKED can never
+are checked against the allowed exits: a terminal state can never be left, so e.g. BLOCKED can never
 re-enter GENERATING.
 """
 
@@ -43,7 +43,7 @@ Billing = Literal["free", "paid"]
 
 TERMINAL = frozenset({"SUCCEEDED", "BLOCKED", "FAILED", "CANCELLED", "UNANSWERABLE"})
 
-# STATE.md §2 "Exits to". FAILED ("unrecoverable error") is also allowed from every
+# Allowed exits per state. FAILED ("unrecoverable error") is also allowed from every
 # non-terminal state, so an unexpected exception can always end a run cleanly.
 _EXITS: dict[str, set[str]] = {
     "RECEIVED": {"INPUT_CHECK"},
@@ -65,7 +65,7 @@ ALLOWED: dict[str, frozenset[str]] = {
 JUDGE_PREVIEW_ROWS = 20
 
 # INPUT_CHECK: obvious prompt-injection / SQL-in-the-question markers. They only *flag*
-# (`possible_injection`): the run continues but can never auto-SUCCEED (STATE.md rule 9).
+# (`possible_injection`): the run continues but can never auto-SUCCEED.
 INJECTION_MARKERS = [
     re.compile(p, re.IGNORECASE)
     for p in (
@@ -90,7 +90,7 @@ class IllegalTransition(RuntimeError):
 
 @dataclass
 class RunOutcome:
-    """What the API returns. Rows only for SUCCEEDED (never stored, STATE.md rule 4)."""
+    """What the API returns. Rows only for SUCCEEDED (never stored)."""
 
     run_id: uuid.UUID
     status: str
@@ -108,7 +108,7 @@ class RunOutcome:
 
 def check_transition(current: str, new: str) -> None:
     if new not in ALLOWED.get(current, frozenset()):
-        raise IllegalTransition(f"{current} -> {new} is not allowed by STATE.md")
+        raise IllegalTransition(f"{current} -> {new} is not an allowed transition")
 
 
 def input_check(question: str, max_chars: int) -> tuple[GuardResult, list[str], str]:

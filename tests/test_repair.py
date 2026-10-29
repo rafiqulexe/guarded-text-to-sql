@@ -1,4 +1,4 @@
-"""Repair path (STATE.md rule 2): question + previous SQL + exact error text go back to the model.
+"""Repair path: question + previous SQL + exact error text go back to the model.
 Rule 1: BLOCKED (and FAILED / passed) results are never repaired. LLM client is a fake."""
 
 from datetime import date

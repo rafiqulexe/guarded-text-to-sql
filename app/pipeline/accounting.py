@@ -1,4 +1,4 @@
-"""Token and cost accounting per LLM call and per run (PLAN 4.4)."""
+"""Token and cost accounting per LLM call and per run."""
 
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal

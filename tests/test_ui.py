@@ -1,4 +1,4 @@
-"""UI page (TOKENS.md): config rendered as data, untrusted text never parsed as HTML."""
+"""UI page: config rendered as data, untrusted text never parsed as HTML."""
 
 import json
 import re

@@ -1,4 +1,4 @@
-"""Guard outcomes, named as in STATE.md."""
+"""Guard outcomes, named after the run states."""
 
 from dataclasses import dataclass
 from enum import StrEnum

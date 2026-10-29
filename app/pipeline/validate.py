@@ -17,7 +17,7 @@ from app.pipeline.llm import LLMClient, LLMResponse
 from app.pipeline.prompts import as_data, load_prompt
 from app.schema_context import build_schema_context
 
-PREVIEW_ROWS = 20  # PLAN 4.2: first 20 rows
+PREVIEW_ROWS = 20  # the judge sees the first 20 rows
 MAX_VALUE_CHARS = 200
 JUDGE_TEMPERATURE = 0.0
 

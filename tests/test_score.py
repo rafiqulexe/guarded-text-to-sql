@@ -1,4 +1,4 @@
-"""SCORING (STATE.md §4): signal values per the table, weights from config, sanity rule."""
+"""SCORING: signal values, weights from config, sanity rule."""
 
 from typing import Any
 
@@ -119,7 +119,7 @@ def test_invalid_weights_are_rejected(weights: dict[str, float]) -> None:
         Settings(_env_file=None, gemini_api_key="k", **weights)  # type: ignore[arg-type]
 
 
-# --- PLAN 4.3 acceptance, through the real REWRITING step ---------------------------------------
+# --- scoring acceptance, through the real REWRITING step ---------------------------------------
 
 
 def _limit_of(sql: str) -> rewrite.RewriteResult:

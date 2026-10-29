@@ -1,4 +1,4 @@
-"""Token + cost accounting (PLAN 4.4): per LLM call and per run, the model that actually answered
+"""Token + cost accounting: per LLM call and per run, the model that actually answered
 (fallback included), real cost (0 on the free tier) and the cost at paid list prices."""
 
 from decimal import Decimal

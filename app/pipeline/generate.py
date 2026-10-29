@@ -49,7 +49,7 @@ def render_repair_prompt(
     allowlist: Allowlist | None = None,
 ) -> tuple[str, str]:
     """Generate's system prompt (same rules, one source) + the repair section; the question,
-    previous SQL and exact error text go in the user message as tagged data (STATE.md rule 2)."""
+    previous SQL and exact error text go in the user message as tagged data."""
     generate_system, _ = render_generate_prompt(
         question, reference_date=reference_date, allowlist=allowlist
     )
@@ -72,7 +72,7 @@ async def repair(
     allowlist: Allowlist | None = None,
 ) -> LLMResponse[SqlCandidate]:
     """Ask for a corrected query. Only repairable failures qualify: BLOCKED is never sent back
-    to the model (STATE.md rule 1), and FAILED is terminal."""
+    to the model, and FAILED is terminal."""
     if failure.outcome is not Outcome.REPAIR:
         raise ValueError(
             f"only repairable results can be repaired, got {failure.outcome} ({failure.rule})"
