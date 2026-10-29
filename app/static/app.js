@@ -22,7 +22,26 @@
     ["sanity", "Result sanity"],
   ];
 
+  // Live progress: friendly label per run state while POST /api/ask is pending.
+  const STEP_LABELS = {
+    RECEIVED: "Checking the question",
+    INPUT_CHECK: "Checking the question",
+    GENERATING: "Writing SQL (LLM)",
+    AST_CHECK: "Running safety checks",
+    SCHEMA_CHECK: "Running safety checks",
+    REWRITING: "Running safety checks",
+    DRY_RUN: "Running safety checks",
+    EXECUTING: "Running the query (read-only)",
+    VALIDATING: "Checking the answer (LLM judge)",
+    SCORING: "Scoring confidence",
+  };
+  const POLL_MS = 1000;
+  const TICK_MS = 250;
+  const SLOW_STEP_MS = 15000;
+
   let current = null; // the run on screen
+  // token: bumped on every start/stop so a poll that resolves late can never draw over the result
+  const progress = { token: 0, runId: null, started: 0, state: null, stepStarted: 0, tick: null, poll: null };
 
   // --- DOM helper: text only ----------------------------------------------------------------------
 
@@ -77,14 +96,88 @@
     setError("");
     setBusy(true);
     renderRunning(question);
+    // A client-chosen id lets us follow the run while the request is pending; without
+    // crypto.randomUUID (non-secure context) only the timer is shown.
+    const runId = window.crypto && typeof window.crypto.randomUUID === "function"
+      ? window.crypto.randomUUID()
+      : null;
+    startProgress(runId);
     try {
-      render(await call("POST", "/api/ask", { question }));
+      const run = await call("POST", "/api/ask", runId ? { question, run_id: runId } : { question });
+      stopProgress();
+      render(run);
     } catch (err) {
+      stopProgress();
       show("run", false);
       setError(`Request failed: ${err.message}`);
     } finally {
+      stopProgress();
       setBusy(false);
     }
+  }
+
+  // --- live progress ------------------------------------------------------------------------------
+
+  function startProgress(runId) {
+    stopProgress();
+    const token = ++progress.token;
+    progress.runId = runId;
+    progress.started = Date.now();
+    progress.state = null;
+    setStep(runId ? "RECEIVED" : null);
+    show("progress", true);
+    tickProgress();
+    progress.tick = setInterval(tickProgress, TICK_MS);
+    if (runId) progress.poll = setTimeout(() => pollProgress(token), POLL_MS);
+  }
+
+  function stopProgress() {
+    progress.token++;
+    clearInterval(progress.tick);
+    clearTimeout(progress.poll);
+    progress.tick = progress.poll = null;
+    show("progress", false);
+    show("progress-slow", false);
+  }
+
+  async function pollProgress(token) {
+    try {
+      const response = await fetch(`/api/runs/${encodeURIComponent(progress.runId)}`);
+      // 404: the run row is not written yet; other errors: try again next time
+      if (response.ok) {
+        const run = await response.json();
+        if (token !== progress.token) return;
+        setStep(run.status);
+        renderTimeline(run);
+      }
+    } catch {
+      /* network hiccup: keep polling */
+    }
+    if (token === progress.token) progress.poll = setTimeout(() => pollProgress(token), POLL_MS);
+  }
+
+  function setStep(state) {
+    if (state !== progress.state) {
+      progress.state = state;
+      progress.stepStarted = Date.now();
+      show("progress-slow", false);
+    }
+    const label = state === null ? "Working" : STEP_LABELS[state] || "Finishing up";
+    $("progress-step").textContent = label;
+  }
+
+  function tickProgress() {
+    const now = Date.now();
+    $("progress-timer").textContent = formatElapsed(now - progress.started);
+    const slow = progress.state !== null && progress.state in STEP_LABELS &&
+      now - progress.stepStarted > SLOW_STEP_MS;
+    show("progress-slow", slow);
+  }
+
+  function formatElapsed(ms) {
+    const seconds = Math.floor(ms / 1000);
+    if (seconds < 60) return `${seconds} s`;
+    return `${Math.floor(seconds / 60)} min ${String(seconds % 60).padStart(2, "0")} s`;
   }
 
   async function act(action) {

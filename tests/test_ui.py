@@ -101,3 +101,58 @@ def test_css_defines_every_tokens_md_color() -> None:
         "--sql-keyword": "#FF7B72",
     }.items():
         assert re.search(rf"{re.escape(token)}:\s*{value};", css), token
+
+
+# --- live progress while a question is running ----------------------------------------------------
+
+STEP_LABELS = {
+    "RECEIVED": "Checking the question",
+    "INPUT_CHECK": "Checking the question",
+    "GENERATING": "Writing SQL (LLM)",
+    "AST_CHECK": "Running safety checks",
+    "SCHEMA_CHECK": "Running safety checks",
+    "REWRITING": "Running safety checks",
+    "DRY_RUN": "Running safety checks",
+    "EXECUTING": "Running the query (read-only)",
+    "VALIDATING": "Checking the answer (LLM judge)",
+    "SCORING": "Scoring confidence",
+}
+
+
+async def test_index_has_a_hidden_progress_element(client: httpx.AsyncClient) -> None:
+    html = (await client.get("/")).text
+    progress = re.search(r'<div id="progress"[^>]*>(.*?)</div>', html, re.S)
+    assert progress and "hidden" in progress.group(0) and 'role="status"' in progress.group(0)
+    for element in ('id="progress-step"', 'id="progress-timer"', 'id="progress-slow"'):
+        assert element in progress.group(1)
+    slow = re.search(r'<p id="progress-slow"[^>]*>(.*?)</p>', html, re.S)
+    assert slow and "hidden" in slow.group(0)
+    assert slow.group(1) == "The model is responding slowly; retries are automatic."
+
+
+def test_js_maps_every_running_state_to_its_step_label() -> None:
+    js = (STATIC / "app.js").read_text(encoding="utf-8")
+    block = re.search(r"const STEP_LABELS = \{(.*?)\};", js, re.S)
+    assert block
+    mapping = dict(re.findall(r'(\w+): "([^"]+)"', block.group(1)))
+    assert mapping == STEP_LABELS
+
+
+def test_js_polls_the_run_with_a_client_id_and_flags_slow_steps() -> None:
+    js = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "crypto.randomUUID" in js and "run_id: runId" in js
+    assert "/api/runs/${encodeURIComponent(progress.runId)}" in js
+    assert re.search(r"const POLL_MS = (\d+);", js).group(1) == "1000"  # type: ignore[union-attr]
+    assert re.search(r"const SLOW_STEP_MS = (\d+);", js).group(1) == "15000"  # type: ignore[union-attr]
+    # a late poll must never draw over the final result
+    assert "token !== progress.token" in js
+
+
+def test_progress_styles_use_tokens_only() -> None:
+    css = (STATIC / "styles.css").read_text(encoding="utf-8")
+    rules = re.findall(r"\.progress[\w-]*\s*\{([^}]*)\}", css)
+    assert rules
+    for body in rules:
+        assert not re.search(r"#[0-9a-fA-F]{3,8}\b", body)
+        for value in re.findall(r"(\d+)px", body):
+            assert value == "1", f"size literal {value}px outside :root"

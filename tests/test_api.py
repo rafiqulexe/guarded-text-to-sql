@@ -1,5 +1,6 @@
 """HTTP API over httpx. Real guards + target DB + app DB; the LLM is always a fake."""
 
+import asyncio
 import uuid
 from collections.abc import AsyncIterator, Callable
 from typing import Any
@@ -314,3 +315,80 @@ async def test_health_without_api_key_is_degraded(api: Api) -> None:
     )
     body = (await api().get("/health")).json()
     assert body["status"] == "degraded" and body["api_key_configured"] is False
+
+
+# --- client-supplied run_id (progress polling) ----------------------------------------------------
+
+
+async def test_ask_uses_the_client_run_id(api: Api) -> None:
+    client = api(ok(GOOD), ok(GOOD))
+    run_id = str(uuid.uuid4())
+    response = await client.post(
+        "/api/ask", json={"question": "How many PG films?", "run_id": run_id}
+    )
+    assert response.status_code == 200 and response.json()["run_id"] == run_id
+    stored_run = (await client.get(f"/api/runs/{run_id}")).json()
+    assert stored_run["status"] == "SUCCEEDED" and stored_run["question"] == "How many PG films?"
+
+
+async def test_ask_with_an_existing_run_id_is_409_and_touches_nothing(api: Api) -> None:
+    client = api(ok(GOOD), ok(GOOD))  # answers for the first ask only: a second LLM call would fail
+    first = await ask(client)
+    response = await client.post(
+        "/api/ask", json={"question": "something else", "run_id": first["run_id"]}
+    )
+    assert response.status_code == 409 and "already exists" in response.json()["detail"]
+    after = (await client.get(f"/api/runs/{first['run_id']}")).json()
+    assert after["question"] == "How many PG films?" and after["status"] == "SUCCEEDED"
+    assert after["transitions"] == first["transitions"]
+
+
+@pytest.mark.parametrize("run_id", ["not-a-uuid", 5, ""])
+async def test_ask_with_a_malformed_run_id_is_422(api: Api, run_id: Any) -> None:
+    response = await api().post("/api/ask", json={"question": "q", "run_id": run_id})
+    assert response.status_code == 422
+
+
+async def test_run_progress_is_visible_while_ask_is_in_flight(
+    clean_runs: sessionmaker[Session], reader_url: str
+) -> None:
+    """GET /api/runs/{id} shows the live state while POST /api/ask is still waiting on the LLM."""
+    release = asyncio.Event()
+
+    class SlowClient(FakeClient):
+        async def structured(self, **kwargs: Any) -> Any:
+            await release.wait()
+            return await super().structured(**kwargs)
+
+    runner = make_runner(clean_runs, reader_url, SlowClient(ok(GOOD), ok(GOOD)))
+    app.dependency_overrides[get_runner] = lambda: runner
+    run_id = str(uuid.uuid4())
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://t"
+        ) as client:
+            pending = asyncio.create_task(
+                client.post("/api/ask", json={"question": "How many PG films?", "run_id": run_id})
+            )
+            live: dict[str, Any] = {}
+            for _ in range(200):
+                response = await client.get(f"/api/runs/{run_id}")
+                if response.status_code == 200:
+                    live = response.json()
+                    if live["status"] == "GENERATING":
+                        break
+                await asyncio.sleep(0.01)
+            assert live["status"] == "GENERATING"  # mid-run, not terminal
+            assert [t["state"] for t in live["transitions"]] == [
+                "RECEIVED",
+                "INPUT_CHECK",
+                "GENERATING",
+            ]
+            assert [e["rule"] for e in live["guard_events"]] == ["input_ok"]
+            assert not pending.done()
+            release.set()
+            final = (await pending).json()
+            assert final["status"] == "SUCCEEDED" and final["run_id"] == run_id
+    finally:
+        release.set()
+        app.dependency_overrides.clear()

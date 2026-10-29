@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.allowlist import Allowlist, load_allowlist
@@ -88,6 +89,10 @@ class IllegalTransition(RuntimeError):
     pass
 
 
+class DuplicateRunId(ValueError):
+    """A run with the requested id already exists (ids may come from the client)."""
+
+
 @dataclass
 class RunOutcome:
     """What the API returns. Rows only for SUCCEEDED (never stored)."""
@@ -148,20 +153,28 @@ class _Run:
 
     @classmethod
     def create(
-        cls, sessions: sessionmaker[Session], question: str, billing: Billing, **fields: Any
+        cls,
+        sessions: sessionmaker[Session],
+        question: str,
+        billing: Billing,
+        run_id: uuid.UUID | None = None,
+        **fields: Any,
     ) -> "_Run":
-        run_id = uuid.uuid4()
+        run_id = run_id or uuid.uuid4()
         now = datetime.now(UTC)
-        with sessions.begin() as s:
-            s.add(
-                QueryRun(
-                    id=run_id,
-                    question=question,
-                    status="RECEIVED",
-                    transitions=[{"state": "RECEIVED", "at": now.isoformat(), "detail": ""}],
-                    **fields,
+        try:
+            with sessions.begin() as s:
+                s.add(
+                    QueryRun(
+                        id=run_id,
+                        question=question,
+                        status="RECEIVED",
+                        transitions=[{"state": "RECEIVED", "at": now.isoformat(), "detail": ""}],
+                        **fields,
+                    )
                 )
-            )
+        except IntegrityError as exc:  # primary key taken: never overwrite or join another run
+            raise DuplicateRunId(f"run {run_id} already exists") from exc
         return cls(sessions, run_id, billing)
 
     @classmethod
@@ -262,7 +275,8 @@ class Runner:
 
     # --- POST /api/ask ------------------------------------------------------------------------
 
-    async def ask(self, question: str) -> RunOutcome:
+    async def ask(self, question: str, run_id: uuid.UUID | None = None) -> RunOutcome:
+        """`run_id` lets a caller follow the run (GET /api/runs/{id}) while it is in progress."""
         settings = self.settings
         # An over-long question is BLOCKED in INPUT_CHECK; only its first MAX_QUESTION_CHARS
         # characters are stored, so a huge body can't bloat the log.
@@ -272,6 +286,7 @@ class Runner:
             self.sessions,
             stored,
             settings.llm_billing,
+            run_id,
             gen_model=settings.gen_model,
             judge_model=settings.judge_model,
         )

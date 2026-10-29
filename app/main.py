@@ -26,7 +26,7 @@ from sqlalchemy.orm import selectinload
 from app.config import Settings, get_settings
 from app.db.models import QueryRun
 from app.pipeline.llm import make_client
-from app.pipeline.runner import IllegalTransition, Runner, RunOutcome
+from app.pipeline.runner import DuplicateRunId, IllegalTransition, Runner, RunOutcome
 
 settings = get_settings()
 
@@ -67,6 +67,9 @@ async def security_headers(
 class AskRequest(BaseModel):
     # Length is enforced by INPUT_CHECK (empty / > MAX_QUESTION_CHARS -> BLOCKED, and logged).
     question: str
+    # Optional client-chosen id, so the client can poll GET /api/runs/{id} for progress while
+    # this request is still running. An id that already exists -> 409.
+    run_id: uuid.UUID | None = None
 
 
 class Transition(BaseModel):
@@ -189,9 +192,12 @@ def index(request: Request, current: SettingsDep) -> HTMLResponse:
 # --- API ------------------------------------------------------------------------------------------
 
 
-@app.post("/api/ask")
+@app.post("/api/ask", responses={409: {}})
 async def ask(body: AskRequest, runner: RunnerDep) -> RunResult:
-    outcome = await runner.ask(body.question)
+    try:
+        outcome = await runner.ask(body.question, run_id=body.run_id)
+    except DuplicateRunId as exc:
+        raise HTTPException(409, str(exc)) from exc
     return _result(runner, outcome)
 
 

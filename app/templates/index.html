@@ -36,6 +36,11 @@
       </div>
       <p id="run-question" class="run-question"></p>
 
+      <div id="progress" class="progress" role="status" hidden>
+        <p class="progress-line"><span id="progress-step" class="progress-step"></span><span id="progress-timer" class="progress-timer mono"></span></p>
+        <p id="progress-slow" class="progress-slow" hidden>The model is responding slowly; retries are automatic.</p>
+      </div>
+
       <div id="confirm-bar" class="panel panel-warn" hidden>
         <p id="confirm-text" class="panel-title"></p>
         <p class="panel-body">Rows are hidden until you review the SQL below. Show results re-runs the same SQL through the same guards.</p>
