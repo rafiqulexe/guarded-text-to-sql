@@ -80,16 +80,25 @@ def test_perfect_and_worst_scores() -> None:
 
 
 def test_default_weighted_sum() -> None:
-    # judge partial .5*.45 + consistency .5*.25 + repairs .5*.15 + sanity 1*.15
+    # judge partial .5*.65 + consistency .5*.15 + repairs .5*.10 + sanity 1*.10
     result = score(inputs(verdict="partial", consistency=0.5, repairs_used=1), WEIGHTS)
-    assert result.score == pytest.approx(0.225 + 0.125 + 0.075 + 0.15)
+    assert result.score == pytest.approx(0.325 + 0.075 + 0.05 + 0.10)
+
+
+def test_a_partial_verdict_alone_falls_below_the_confirmation_threshold() -> None:
+    threshold = get_settings().confidence_threshold
+    partial = score(inputs(verdict="partial", row_count=3), WEIGHTS)  # every other signal perfect
+    assert partial.score == pytest.approx(0.675) and partial.score < threshold
+    # a "yes" stays above it even when the second candidate disagrees
+    disagreeing = score(inputs(verdict="yes", consistency=0.0, row_count=3), WEIGHTS)
+    assert disagreeing.score == pytest.approx(0.85) and disagreeing.score >= threshold
 
 
 # --- weights come from config ---------------------------------------------------------------------
 
 
-def test_default_weights_are_the_state_md_table() -> None:
-    assert WEIGHTS == {"judge": 0.45, "consistency": 0.25, "repairs": 0.15, "sanity": 0.15}
+def test_default_weights() -> None:
+    assert WEIGHTS == {"judge": 0.65, "consistency": 0.15, "repairs": 0.10, "sanity": 0.10}
 
 
 def test_changing_config_weights_changes_the_score() -> None:

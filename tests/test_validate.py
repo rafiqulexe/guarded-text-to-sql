@@ -148,3 +148,13 @@ def test_verdict_schema_matches_stack_md() -> None:
     schema = JudgeVerdict.model_json_schema()
     assert set(schema["properties"]) == {"verdict", "expects_rows", "reason"}
     assert schema["properties"]["verdict"]["enum"] == ["yes", "partial", "no"]
+
+
+def test_judge_counts_extra_columns_and_wrong_format_against_the_answer() -> None:
+    system, _ = render_judge_prompt("Which day has the most rentals?", SQL, COLUMNS, ROWS)
+    flat = " ".join(system.split())
+    assert "exactly the columns the question asks for" in flat
+    assert "an extra column the question did not ask for" in flat
+    assert "a count where an amount was asked" in flat
+    assert "stray padding" in flat
+    assert "Be strict: say yes only when" in flat

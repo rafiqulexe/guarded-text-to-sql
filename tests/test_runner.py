@@ -545,5 +545,11 @@ async def test_real_scorer_sanity_through_the_runner(
     row, _ = stored(clean_runs, outcome.run_id)
     assert row.row_count == rows
     assert row.confidence_breakdown is not None and row.confidence_breakdown["sanity"] == sanity
-    expected = 0.45 + 0.25 + 0.15 + 0.15 * sanity
+    w = get_settings()
+    expected = (
+        w.score_weight_judge
+        + w.score_weight_consistency
+        + w.score_weight_repairs
+        + w.score_weight_sanity * sanity
+    )
     assert float(row.confidence or 0) == pytest.approx(expected, abs=1e-3)

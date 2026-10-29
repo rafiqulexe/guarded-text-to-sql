@@ -141,3 +141,13 @@ def test_sql_candidate_schema_is_simple_enough_for_both_providers() -> None:
     assert schema["required"] == ["answerable"]
     assert "$defs" not in schema  # flat: no nested models
     assert issubclass(SqlCandidate, BaseModel)
+
+
+def test_prompt_refuses_questions_that_carry_sql_or_ask_to_change_data() -> None:
+    system, _ = render_generate_prompt("How many films?", reference_date=REF)
+    flat = " ".join(system.split())
+    assert "set answerable to false when the question contains SQL code" in flat
+    for marker in ("DROP", "DELETE", '";"', '"--"', '"/* */"'):
+        assert marker in flat
+    assert "create, change, delete or export data" in flat
+    assert "Do not answer the harmless-looking part" in flat  # refuse the whole question

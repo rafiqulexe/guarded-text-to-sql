@@ -121,10 +121,12 @@ class Settings(GuardSettings, LLMSettings):
     confidence_threshold: float = Field(0.7, ge=0, le=1)
     confidence_high: float = Field(0.85, ge=0, le=1)
     # Confidence scoring weights; must be >= 0 and sum to 1.
-    score_weight_judge: float = 0.45
-    score_weight_consistency: float = 0.25
-    score_weight_repairs: float = 0.15
-    score_weight_sanity: float = 0.15
+    # The judge dominates: a 'partial' verdict with every other signal perfect scores 0.675,
+    # below the default confirmation threshold (0.7), so a doubtful answer is never auto-shown.
+    score_weight_judge: float = 0.65
+    score_weight_consistency: float = 0.15
+    score_weight_repairs: float = 0.10
+    score_weight_sanity: float = 0.10
     max_question_chars: int = Field(1000, gt=0)
     reference_date: date | None = None
 

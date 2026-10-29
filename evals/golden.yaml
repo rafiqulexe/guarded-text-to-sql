@@ -482,7 +482,7 @@ cases:
   - id: bn_12
     lang: bn
     category: aggregates_dates
-    question: "২০২৪ সালের মার্চ মাসে মোট কত পেমেন্ট হয়েছে?"
+    question: "২০২৪ সালের মার্চ মাসে মোট কত টাকা পেমেন্ট হয়েছে?"
     sql: >-
       SELECT sum(amount) FROM payment WHERE payment_date >= '2024-03-01' AND payment_date < '2024-04-01'
     row_count: 1
