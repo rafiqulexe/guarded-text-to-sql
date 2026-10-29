@@ -26,6 +26,19 @@ PROVIDER_DEFAULTS: dict[str, tuple[str, str, int, str]] = {
 }
 MODEL_PREFIX: dict[str, str] = {"gemini": "gemini-", "anthropic": "claude-"}
 
+# List prices, USD per 1M tokens (input, output). Used for `cost_usd_list` (what a run would cost
+# at paid prices) and for `cost_usd` when LLM_BILLING=paid. Checked 2026-10-29 on
+# ai.google.dev/gemini-api/docs/pricing (standard, paid tier; Gemini output includes thinking
+# tokens) and the Anthropic model table. Note: gemini-3.8-flash / 3.6-flash double to
+# 1.50 / 7.50 from 2027-01-01.
+MODEL_PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
+    "gemini-3.8-flash": (0.75, 3.75),
+    "gemini-3.6-flash": (0.75, 3.75),
+    "gemini-3.5-flash-lite": (0.30, 2.50),
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-haiku-5-5": (0.10, 0.50),
+}
+
 
 class _EnvSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -71,6 +84,7 @@ class LLMSettings(_EnvSettings):
     llm_max_backoff_s: float = Field(60, gt=0)  # longer server retry-after = quota exhausted
     llm_timeout_s: float = Field(60, gt=0)  # per request; a hung call is a transient error
     llm_fallback_model: str | None = None  # None -> provider default; "none" disables
+    llm_billing: Literal["free", "paid"] = "free"  # free tier: real cost_usd is 0
 
     @model_validator(mode="after")
     def _provider_is_configured(self) -> Self:

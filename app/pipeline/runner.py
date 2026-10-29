@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -24,6 +24,7 @@ from app.db.models import GuardEvent, QueryRun
 from app.db.session import get_sessionmaker
 from app.pipeline import dry_run as dry_run_guard
 from app.pipeline import execute as execute_guard
+from app.pipeline.accounting import Ledger, Purpose
 from app.pipeline.consistency import (
     CandidateRecord,
     ConsistencyResult,
@@ -32,10 +33,12 @@ from app.pipeline.consistency import (
     LLMCall,
     run_self_consistency,
 )
-from app.pipeline.llm import LLMClient, LLMError
+from app.pipeline.llm import LLMClient, LLMError, LLMResponse
 from app.pipeline.result import GuardResult, Outcome, Severity, Stage, blocked, passed
 from app.pipeline.score import ScoreInputs, ScoreResult, make_scorer
 from app.pipeline.validate import JudgeFn, make_judge
+
+Billing = Literal["free", "paid"]
 
 TERMINAL = frozenset({"SUCCEEDED", "BLOCKED", "FAILED", "CANCELLED", "UNANSWERABLE"})
 
@@ -131,15 +134,20 @@ def input_check(question: str, max_chars: int) -> tuple[GuardResult, list[str], 
 class _Run:
     """One run's in-memory state + its DB row; every change is written through immediately."""
 
-    def __init__(self, sessions: sessionmaker[Session], run_id: uuid.UUID) -> None:
+    def __init__(
+        self, sessions: sessionmaker[Session], run_id: uuid.UUID, billing: Billing = "free"
+    ) -> None:
         self.sessions, self.id = sessions, run_id
+        self.ledger = Ledger(billing)
         self.state = "RECEIVED"
         self.started = time.monotonic()
         self.transitions: list[str] = ["RECEIVED"]
         self.events: list[dict[str, Any]] = []
 
     @classmethod
-    def create(cls, sessions: sessionmaker[Session], question: str, **fields: Any) -> "_Run":
+    def create(
+        cls, sessions: sessionmaker[Session], question: str, billing: Billing, **fields: Any
+    ) -> "_Run":
         run_id = uuid.uuid4()
         now = datetime.now(UTC)
         with sessions.begin() as s:
@@ -152,7 +160,7 @@ class _Run:
                     **fields,
                 )
             )
-        return cls(sessions, run_id)
+        return cls(sessions, run_id, billing)
 
     @classmethod
     def load(cls, sessions: sessionmaker[Session], run_id: uuid.UUID) -> tuple["_Run", QueryRun]:
@@ -185,6 +193,21 @@ class _Run:
                 row.latency_ms = int((now - row.created_at).total_seconds() * 1000)
         self.state = state
         self.transitions.append(state)
+
+    def record_llm(
+        self,
+        purpose: Purpose,
+        requested_model: str,
+        *,
+        candidate: int | None = None,
+        response: LLMResponse[Any] | None = None,
+        error: LLMError | None = None,
+    ) -> None:
+        """Per-call accounting, written immediately (so BLOCKED / FAILED runs keep it too)."""
+        self.ledger.record(
+            purpose, requested_model, candidate=candidate, response=response, error=error
+        )
+        self.update(**self.ledger.fields())
 
     def update(self, **fields: Any) -> None:
         with self.sessions.begin() as s:
@@ -239,6 +262,7 @@ class Runner:
         run = _Run.create(
             self.sessions,
             question,
+            settings.llm_billing,
             gen_model=settings.gen_model,
             judge_model=settings.judge_model,
         )
@@ -292,9 +316,11 @@ class Runner:
                 question, primary.final_sql, result.columns, result.rows[:JUDGE_PREVIEW_ROWS]
             )
         except LLMError as exc:
+            run.record_llm("judge", settings.judge_model, error=exc)
             detail = f"judge call failed: {exc}"
             run.to("FAILED", detail, error=detail)
             return self._outcome(run, "FAILED", detail, flags=flags, sql=primary.final_sql)
+        run.record_llm("judge", settings.judge_model, response=judged)
         verdict = judged.parsed
         run.event(
             GuardResult(
@@ -326,9 +352,7 @@ class Runner:
             "confidence_breakdown": score.breakdown,
             "judge_verdict": verdict.verdict,
             "judge_reason": verdict.reason,
-            "judge_model": judged.model,
-            "input_tokens": result.input_tokens + judged.input_tokens,
-            "output_tokens": result.output_tokens + judged.output_tokens,
+            "judge_model": judged.model,  # the model that actually answered
         }
         run.to("SCORING", f"score={score.score:.3f}", **scored)
         needs_confirmation = (
@@ -416,8 +440,14 @@ class Runner:
         def on_event(result: GuardResult, record: CandidateRecord, sql: str) -> None:
             run.event(result, sql, record.index)
 
-        def on_llm(call: LLMCall) -> None:  # per-call accounting: 4.4
-            return None
+        def on_llm(call: LLMCall) -> None:
+            run.record_llm(
+                call.purpose,
+                call.requested_model,
+                candidate=call.candidate,
+                response=call.response,
+                error=call.error,
+            )
 
         return Hooks(on_state=on_state, on_event=on_event, on_llm=on_llm)
 
@@ -427,8 +457,6 @@ class Runner:
         fields: dict[str, Any] = {
             "candidates": result.candidates_log(),
             "repairs_used": result.repairs_used,
-            "input_tokens": result.input_tokens,
-            "output_tokens": result.output_tokens,
         }
         if primary is not None:
             fields["final_sql"] = primary.final_sql

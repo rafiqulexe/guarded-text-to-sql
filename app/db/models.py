@@ -52,6 +52,15 @@ class QueryRun(Base):
     transitions: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, default=list, server_default="[]"
     )
+    # One entry per LLM call (generate / repair / judge): requested and answering model,
+    # fallback, tokens, attempts, list-price cost, error.
+    llm_calls: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    # What the run would cost at paid list prices (cost_usd is the real cost: 0 on a free tier).
+    cost_usd_list: Mapped[Decimal] = mapped_column(
+        Numeric(10, 6), default=Decimal(0), server_default="0"
+    )
 
     guard_events: Mapped[list["GuardEvent"]] = relationship(
         back_populates="run", order_by="GuardEvent.id", passive_deletes=True

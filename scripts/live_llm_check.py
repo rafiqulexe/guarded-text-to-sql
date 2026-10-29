@@ -6,6 +6,7 @@
     uv run python scripts/live_llm_check.py repair    # PLAN 3.3: error fed back, re-guarded
     uv run python scripts/live_llm_check.py consistency  # PLAN 3.4: 5 manual questions (2 Bangla)
     uv run python scripts/live_llm_check.py judge     # PLAN 4.2: judge verdicts on real rows
+    uv run python scripts/live_llm_check.py run       # PLAN 4.4: one full run, tokens + cost
 
 Unit tests never call an LLM (the client is mocked); this script is the only place that does.
 """
@@ -22,12 +23,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.allowlist import load_allowlist
 from app.config import get_settings
+from app.db.models import QueryRun
+from app.db.session import get_sessionmaker
 from app.pipeline import ast_guard, dry_run, rewrite, schema_guard
 from app.pipeline.consistency import CandidateRecord, guard_sql, run_self_consistency
 from app.pipeline.execute import execute
 from app.pipeline.generate import generate, render_generate_prompt, repair
 from app.pipeline.llm import make_client
 from app.pipeline.result import GuardResult, Outcome
+from app.pipeline.runner import Runner
 from app.pipeline.validate import judge
 from app.schema_context import build_schema_context, estimate_tokens
 
@@ -262,6 +266,34 @@ async def check_judge() -> None:
         )
 
 
+async def check_run() -> None:
+    """PLAN 4.4: one real run through the Runner; prints what was persisted to query_runs."""
+    settings = get_settings()
+    runner = Runner(client=make_client(settings), settings=settings)
+    outcome = await runner.ask("Which 3 customers made the most rentals?")
+    with get_sessionmaker()() as s:
+        row = s.get(QueryRun, outcome.run_id)
+        assert row is not None
+        print(
+            f"run {row.id}: {row.status} (confidence {row.confidence}, verdict {row.judge_verdict})"
+        )
+        print("   transitions: " + " -> ".join(t["state"] for t in row.transitions))
+        print(f"   final SQL: {row.final_sql}")
+        print(f"   rows returned: {list(outcome.rows)}")
+        for c in row.llm_calls:
+            via = f" (fallback from {c['fallback_from']})" if c["fallback_from"] else ""
+            print(
+                f"   {c['purpose']:<8} #{c['candidate'] or '-'} asked={c['requested_model']} "
+                f"answered={c['model']}{via} tokens={c['input_tokens']}/{c['output_tokens']} "
+                f"attempts={c['attempts']} list=${c['cost_usd_list']} {c['error'] or ''}"
+            )
+        print(
+            f"   totals: tokens in={row.input_tokens} out={row.output_tokens} | "
+            f"cost_usd (real, LLM_BILLING={settings.llm_billing}) = ${row.cost_usd} | "
+            f"cost_usd_list (paid prices) = ${row.cost_usd_list}"
+        )
+
+
 CHECKS: dict[str, Callable[[], Coroutine[Any, Any, None]]] = {
     "client": check_client,
     "context": check_context,
@@ -269,6 +301,7 @@ CHECKS: dict[str, Callable[[], Coroutine[Any, Any, None]]] = {
     "repair": check_repair,
     "consistency": check_consistency,
     "judge": check_judge,
+    "run": check_run,
 }
 
 
