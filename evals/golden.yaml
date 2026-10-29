@@ -1,0 +1,489 @@
+# Golden set: natural-language questions with a verified expected answer on the pinned Pagila data.
+# Relative dates ("last month", "yesterday") are relative to REFERENCE_DATE (2026-07-29).
+#
+# result_hash: SHA-256 of the sorted, normalised result rows (numbers rounded to 2 dp, timestamps
+# ISO UTC, column names ignored); column order is ignored when order_insensitive_cols is true.
+# Every expected SQL must pass all guards and, run as the read-only role, reproduce row_count and
+# result_hash. Checked by tests/test_golden.py and `uv run python -m evals.golden`.
+# Hashes are written once from verified SQL; never regenerate them to make a check pass.
+
+cases:
+  - id: en_easy_01
+    lang: en
+    category: easy
+    question: "How many films are in the catalog?"
+    sql: >-
+      SELECT count(*) FROM film
+    row_count: 1
+    result_hash: efc2ffb9294a83b421c7ac6daa77911209f13d3e4ab65147ec63306f917db2d7
+
+  - id: en_easy_02
+    lang: en
+    category: easy
+    question: "How many films are rated PG-13?"
+    sql: >-
+      SELECT count(*) FROM film WHERE rating = 'PG-13'
+    row_count: 1
+    result_hash: 299a1d40498a536580bfb443b26895ddb4ae9ee3e59daaef8b39060015e4c176
+
+  - id: en_easy_03
+    lang: en
+    category: easy
+    question: "How many actors are in the database?"
+    sql: >-
+      SELECT count(*) FROM actor
+    row_count: 1
+    result_hash: 4239215d0abce6c70a63ae525510ba0004d1f67a3b00dc7ee199cd3b05fbcf2c
+
+  - id: en_easy_04
+    lang: en
+    category: easy
+    question: "How many customers are active?"
+    sql: >-
+      SELECT count(*) FROM customer WHERE active = 1
+    row_count: 1
+    result_hash: 341db92f1d04f9a328e96f903a439743f524902dcdbbba6e825949c23fdc2c98
+
+  - id: en_easy_05
+    lang: en
+    category: easy
+    question: "What is the average rental rate of a film, rounded to 2 decimals?"
+    sql: >-
+      SELECT round(avg(rental_rate), 2) FROM film
+    row_count: 1
+    result_hash: afbcb4292e99abfd2797620db806d317736e5ef100353d95bdd04adf46cda548
+
+  - id: en_easy_06
+    lang: en
+    category: easy
+    question: "What is the running time in minutes of the longest film?"
+    sql: >-
+      SELECT max(length) FROM film
+    row_count: 1
+    result_hash: ddaa0991caac50edbae947c2c94a15be45d03c67454ccf287d3460763318a4c9
+
+  - id: en_easy_07
+    lang: en
+    category: easy
+    question: "How many films are longer than 180 minutes?"
+    sql: >-
+      SELECT count(*) FROM film WHERE length > 180
+    row_count: 1
+    result_hash: 2dcaf6003239e6a4340b6eb84c378b2d49f54165407caaa32a6ff5bbe7d52501
+
+  - id: en_easy_08
+    lang: en
+    category: easy
+    question: "How many films have a replacement cost above 25 dollars?"
+    sql: >-
+      SELECT count(*) FROM film WHERE replacement_cost > 25
+    row_count: 1
+    result_hash: 0ebc26676d2f791aeb6e1be897f1a46eaf7b931fb16eeda6433a6ecf17fee237
+
+  - id: en_easy_09
+    lang: en
+    category: easy
+    question: "How many film categories are there?"
+    sql: >-
+      SELECT count(*) FROM category
+    row_count: 1
+    result_hash: f50dfb5daf0a6e22dd3f4d67e8ad08e0617e33a42b66fb21ee8414f8476f0002
+
+  - id: en_easy_10
+    lang: en
+    category: easy
+    question: "List the names of all languages."
+    sql: >-
+      SELECT name FROM language
+    row_count: 6
+    result_hash: 761c485342e06aa6573040b3d93de53fff235003e5b83d438599fce764a21c5f
+
+  - id: en_easy_11
+    lang: en
+    category: easy
+    question: "How many films were released in 2024?"
+    sql: >-
+      SELECT count(*) FROM film WHERE release_year = 2024
+    row_count: 1
+    result_hash: 56fef73fec41cd6a63e50ecc35fb512c4c852523e7a638c666538f59241a4daf
+
+  - id: en_easy_12
+    lang: en
+    category: easy
+    question: "How many films include 'Behind the Scenes' as a special feature?"
+    sql: >-
+      SELECT count(*) FROM film WHERE special_features @> ARRAY['Behind the Scenes']
+    row_count: 1
+    result_hash: 48ca6cb648eb26b6db95d82f2594f72458cc5eaeab02b9cc7bc5707e973e8e6f
+
+  - id: en_easy_13
+    lang: en
+    category: easy
+    question: "How many rentals have not been returned yet?"
+    sql: >-
+      SELECT count(*) FROM rental WHERE return_date IS NULL
+    row_count: 1
+    result_hash: 4f874fc41d072a1e9588b008b9aa19f209afb0249013f19a199f1ca380decb79
+
+  - id: en_easy_14
+    lang: en
+    category: easy
+    question: "How many films have a rental duration of 7 days?"
+    sql: >-
+      SELECT count(*) FROM film WHERE rental_duration = 7
+    row_count: 1
+    result_hash: 494405dcb3c0d4f242f4bd624dc4e64dab79b55947326fb94d8c697d81e9fec9
+
+  - id: en_easy_15
+    lang: en
+    category: easy
+    question: "List the first and last names of actors whose first name is PENELOPE."
+    sql: >-
+      SELECT first_name, last_name FROM actor WHERE first_name = 'PENELOPE'
+    order_insensitive_cols: true
+    row_count: 4
+    result_hash: 15d857bc49236af970c697e64c5f06cb6e90c0c4695a3d1c8040ea747a4c53eb
+
+  - id: en_join_01
+    lang: en
+    category: joins
+    question: "How many films are in the Action category?"
+    sql: >-
+      SELECT count(*) FROM film_category fc JOIN category c ON c.category_id = fc.category_id WHERE c.name = 'Action'
+    row_count: 1
+    result_hash: 8a6c7d81263de2a4c129bf094270c1dad75215fec78b57ff1ab3d9e497b16f83
+
+  - id: en_join_02
+    lang: en
+    category: joins
+    question: "How many films are there in each category? Show the category name and the count."
+    sql: >-
+      SELECT c.name, count(*) FROM film_category fc JOIN category c ON c.category_id = fc.category_id GROUP BY c.name
+    order_insensitive_cols: true
+    row_count: 16
+    result_hash: e1e601dbc9b70f696dad2b4f13a9203f2ad88d3914a46400b76ff50d6a54d970
+
+  - id: en_join_03
+    lang: en
+    category: joins
+    question: "Which film titles does the actor PENELOPE GUINESS appear in?"
+    sql: >-
+      SELECT f.title FROM film f JOIN film_actor fa ON fa.film_id = f.film_id JOIN actor a ON a.actor_id = fa.actor_id WHERE a.first_name = 'PENELOPE' AND a.last_name = 'GUINESS'
+    row_count: 19
+    result_hash: 84ad02c8f86c651f156e9f5341af1821f9477de72955e33af59b3dcf0345e459
+
+  - id: en_join_04
+    lang: en
+    category: joins
+    question: "How many films are in Italian?"
+    sql: >-
+      SELECT count(*) FROM film f JOIN language l ON l.language_id = f.language_id WHERE l.name = 'Italian'
+    row_count: 1
+    result_hash: 167dbc1e25807d22e2135508be27bc23be270a1633f61ba9bde2e5fcdb878126
+
+  - id: en_join_05
+    lang: en
+    category: joins
+    question: "Which 3 actors appear in the most films? Show first name, last name and number of films."
+    sql: >-
+      SELECT a.first_name, a.last_name, count(*) AS films FROM actor a JOIN film_actor fa ON fa.actor_id = a.actor_id GROUP BY a.actor_id, a.first_name, a.last_name ORDER BY films DESC LIMIT 3
+    order_insensitive_cols: true
+    row_count: 3
+    result_hash: 3243ea436dc18441f323c5419d18f972c9c92d2092e532a0a973491c2b9feeb8
+
+  - id: en_join_06
+    lang: en
+    category: joins
+    question: "How many customers live in Canada?"
+    sql: >-
+      SELECT count(*) FROM customer cu JOIN address ad ON ad.address_id = cu.address_id JOIN city ci ON ci.city_id = ad.city_id JOIN country co ON co.country_id = ci.country_id WHERE co.country = 'Canada'
+    row_count: 1
+    result_hash: 6cfb7994e5f37a89743ee1faf140597ce1daeee03fe251813f8098aba45fca0f
+
+  - id: en_join_07
+    lang: en
+    category: joins
+    question: "Which 5 countries have the most customers? Show the country and the number of customers."
+    sql: >-
+      SELECT co.country, count(*) AS customers FROM customer cu JOIN address ad ON ad.address_id = cu.address_id JOIN city ci ON ci.city_id = ad.city_id JOIN country co ON co.country_id = ci.country_id GROUP BY co.country ORDER BY customers DESC LIMIT 5
+    order_insensitive_cols: true
+    row_count: 5
+    result_hash: d21e3315e72504df519c744f0a2c2c4ee811f8dfbf4f1a2356f9c90ba6c84ac1
+
+  - id: en_join_08
+    lang: en
+    category: joins
+    question: "How many inventory copies of the film ACADEMY DINOSAUR are there?"
+    sql: >-
+      SELECT count(*) FROM inventory i JOIN film f ON f.film_id = i.film_id WHERE f.title = 'ACADEMY DINOSAUR'
+    row_count: 1
+    result_hash: fb9d91374ca920529f110ec517613d6a766f9c318a3fa233e21523d266204eae
+
+  - id: en_join_09
+    lang: en
+    category: joins
+    question: "How many times was the film BUCKET BROTHERHOOD rented?"
+    sql: >-
+      SELECT count(*) FROM rental r JOIN inventory i ON i.inventory_id = r.inventory_id JOIN film f ON f.film_id = i.film_id WHERE f.title = 'BUCKET BROTHERHOOD'
+    row_count: 1
+    result_hash: a208976a4c2c448cfc9de911ba72cb439dfcd4010f9330fe0c1f5992bd1e0314
+
+  - id: en_join_10
+    lang: en
+    category: joins
+    question: "What is the total amount paid by the customer MARY SMITH?"
+    sql: >-
+      SELECT sum(p.amount) FROM payment p JOIN customer cu ON cu.customer_id = p.customer_id WHERE cu.first_name = 'MARY' AND cu.last_name = 'SMITH'
+    row_count: 1
+    result_hash: a6e56137548aafab133069509adb8bd446940d65d940315b7447d69c2ba9303e
+
+  - id: en_join_11
+    lang: en
+    category: joins
+    question: "Which actors appear in the film ACADEMY DINOSAUR? Show first and last names."
+    sql: >-
+      SELECT a.first_name, a.last_name FROM actor a JOIN film_actor fa ON fa.actor_id = a.actor_id JOIN film f ON f.film_id = fa.film_id WHERE f.title = 'ACADEMY DINOSAUR'
+    order_insensitive_cols: true
+    row_count: 10
+    result_hash: 0748a6ce8a4a9fb58964966f253c841d12c17c0440123c332a4dd4709e69425b
+
+  - id: en_join_12
+    lang: en
+    category: joins
+    question: "How many different films has the customer MARY SMITH rented?"
+    sql: >-
+      SELECT count(DISTINCT i.film_id) FROM rental r JOIN inventory i ON i.inventory_id = r.inventory_id JOIN customer cu ON cu.customer_id = r.customer_id WHERE cu.first_name = 'MARY' AND cu.last_name = 'SMITH'
+    row_count: 1
+    result_hash: 09f7239ecb82c0a55187833c4509e7291c0586188e2ec81def2666d1e8aef36b
+
+  - id: en_join_13
+    lang: en
+    category: joins
+    question: "Which category has the highest average film length? Show the category name and the average rounded to 2 decimals."
+    sql: >-
+      SELECT c.name, round(avg(f.length), 2) AS avg_length FROM film f JOIN film_category fc ON fc.film_id = f.film_id JOIN category c ON c.category_id = fc.category_id GROUP BY c.name ORDER BY avg_length DESC LIMIT 1
+    order_insensitive_cols: true
+    row_count: 1
+    result_hash: 587cc799505017d71cfc6923dafdaeb7ddd5b5de49c09722834f3849f3e4d7ac
+
+  - id: en_join_14
+    lang: en
+    category: joins
+    question: "How many Horror films are rated R?"
+    sql: >-
+      SELECT count(*) FROM film f JOIN film_category fc ON fc.film_id = f.film_id JOIN category c ON c.category_id = fc.category_id WHERE c.name = 'Horror' AND f.rating = 'R'
+    row_count: 1
+    result_hash: 8e15842a00d63f9bc71ada0c8a556679378477d860e29d2fffd7df9087203691
+
+  - id: en_join_15
+    lang: en
+    category: joins
+    question: "Which 3 films were rented the most times? Show the title and the number of rentals."
+    sql: >-
+      SELECT f.title, count(*) AS rentals FROM rental r JOIN inventory i ON i.inventory_id = r.inventory_id JOIN film f ON f.film_id = i.film_id GROUP BY f.film_id, f.title ORDER BY rentals DESC LIMIT 3
+    order_insensitive_cols: true
+    row_count: 3
+    result_hash: 3ac4a0b3f9a650491c2f5ddfc952f05a9546459d6a43afce42d4eb8aa71cbaf0
+
+  - id: en_agg_01
+    lang: en
+    category: aggregates_dates
+    question: "What was the total payment amount in March 2024?"
+    sql: >-
+      SELECT sum(amount) FROM payment WHERE payment_date >= '2024-03-01' AND payment_date < '2024-04-01'
+    row_count: 1
+    result_hash: b514d2c88713577ce0014419c49e5b9c2a27d2d2f1fcc3f71f2e182bc937f62d
+
+  - id: en_agg_02
+    lang: en
+    category: aggregates_dates
+    question: "How many rentals were made in 2025?"
+    sql: >-
+      SELECT count(*) FROM rental WHERE rental_date >= '2025-01-01' AND rental_date < '2026-01-01'
+    row_count: 1
+    result_hash: c781d7552c1d2b7371ab2b2fc96c8905ff0bdd7847ad6bfff12ef94faddfc926
+
+  - id: en_agg_03
+    lang: en
+    category: aggregates_dates
+    question: "Show the total payment amount for each month of 2025."
+    sql: >-
+      SELECT date_trunc('month', payment_date) AS month, sum(amount) FROM payment WHERE payment_date >= '2025-01-01' AND payment_date < '2026-01-01' GROUP BY 1
+    order_insensitive_cols: true
+    row_count: 12
+    result_hash: 612aaed08374c83b3450287c37ca127dd70d652859531d23d82852555522d5c4
+
+  - id: en_agg_04
+    lang: en
+    category: aggregates_dates
+    question: "What was the total revenue last month?"
+    sql: >-
+      SELECT sum(amount) FROM payment WHERE payment_date >= '2026-06-01' AND payment_date < '2026-07-01'
+    row_count: 1
+    result_hash: 14b139a3c0979522b5b2bed3bc0d6a8df57925aa73dd9ca1712658657c1c24d1
+
+  - id: en_agg_05
+    lang: en
+    category: aggregates_dates
+    question: "How many rentals were made yesterday?"
+    sql: >-
+      SELECT count(*) FROM rental WHERE rental_date >= '2026-07-28' AND rental_date < '2026-07-29'
+    row_count: 1
+    result_hash: 9e6484993e15e0eb6f5874998e3e06880c829715c37044512bfd82ade5a76c6a
+
+  - id: en_agg_06
+    lang: en
+    category: aggregates_dates
+    question: "How many rentals were made in each year? Show the year and the count."
+    sql: >-
+      SELECT extract(year FROM rental_date) AS year, count(*) FROM rental GROUP BY 1
+    order_insensitive_cols: true
+    row_count: 5
+    result_hash: 7b4b5018cd8de8639098dd3e8691aacbcc7fe4dc5f233dc837b69a4f9e187d43
+
+  - id: en_agg_07
+    lang: en
+    category: aggregates_dates
+    question: "On which day of the week are the most rentals made?"
+    sql: >-
+      SELECT to_char(rental_date, 'FMDay') AS weekday FROM rental GROUP BY 1 ORDER BY count(*) DESC LIMIT 1
+    row_count: 1
+    result_hash: a1b317584557e85651da9378674e6f4e7a60c5a193403431132c5d6049525e82
+
+  - id: en_agg_08
+    lang: en
+    category: aggregates_dates
+    question: "How many different customers made a payment in 2026?"
+    sql: >-
+      SELECT count(DISTINCT customer_id) FROM payment WHERE payment_date >= '2026-01-01' AND payment_date < '2027-01-01'
+    row_count: 1
+    result_hash: 38c705633593455683ac0d86e69c88dccbc84771e61975b27604075e3aab39f3
+
+  - id: en_agg_09
+    lang: en
+    category: aggregates_dates
+    question: "Who were the top 3 customers by total payments in 2025? Show first name, last name and total paid."
+    sql: >-
+      SELECT cu.first_name, cu.last_name, sum(p.amount) AS total FROM payment p JOIN customer cu ON cu.customer_id = p.customer_id WHERE p.payment_date >= '2025-01-01' AND p.payment_date < '2026-01-01' GROUP BY cu.customer_id, cu.first_name, cu.last_name ORDER BY total DESC LIMIT 3
+    order_insensitive_cols: true
+    row_count: 3
+    result_hash: dc618f0c36d7237908da6d15fac796b5ef5ce48c1d4d3a603cb6e2a2e698b23d
+
+  - id: en_agg_10
+    lang: en
+    category: aggregates_dates
+    question: "What is the average payment amount for each year, rounded to 2 decimals?"
+    sql: >-
+      SELECT extract(year FROM payment_date) AS year, round(avg(amount), 2) FROM payment GROUP BY 1
+    order_insensitive_cols: true
+    row_count: 5
+    result_hash: 6cf25f49c55414d8a12d1800b5dc18f7cc5562d73b11e9b92520e5bfeeb95b86
+
+  - id: bn_01
+    lang: bn
+    category: easy
+    question: "ক্যাটালগে মোট কতগুলো ফিল্ম আছে?"
+    sql: >-
+      SELECT count(*) FROM film
+    row_count: 1
+    result_hash: efc2ffb9294a83b421c7ac6daa77911209f13d3e4ab65147ec63306f917db2d7
+
+  - id: bn_02
+    lang: bn
+    category: easy
+    question: "কতগুলো ফিল্মের রেটিং PG-13?"
+    sql: >-
+      SELECT count(*) FROM film WHERE rating = 'PG-13'
+    row_count: 1
+    result_hash: 299a1d40498a536580bfb443b26895ddb4ae9ee3e59daaef8b39060015e4c176
+
+  - id: bn_03
+    lang: bn
+    category: easy
+    question: "ডাটাবেসে মোট কতজন অভিনেতা আছেন?"
+    sql: >-
+      SELECT count(*) FROM actor
+    row_count: 1
+    result_hash: 4239215d0abce6c70a63ae525510ba0004d1f67a3b00dc7ee199cd3b05fbcf2c
+
+  - id: bn_04
+    lang: bn
+    category: easy
+    question: "সবচেয়ে দীর্ঘ ফিল্মটি কত মিনিটের?"
+    sql: >-
+      SELECT max(length) FROM film
+    row_count: 1
+    result_hash: ddaa0991caac50edbae947c2c94a15be45d03c67454ccf287d3460763318a4c9
+
+  - id: bn_05
+    lang: bn
+    category: easy
+    question: "সব ভাষার নাম দেখাও।"
+    sql: >-
+      SELECT name FROM language
+    row_count: 6
+    result_hash: 761c485342e06aa6573040b3d93de53fff235003e5b83d438599fce764a21c5f
+
+  - id: bn_06
+    lang: bn
+    category: joins
+    question: "Action ক্যাটাগরিতে কতগুলো ফিল্ম আছে?"
+    sql: >-
+      SELECT count(*) FROM film_category fc JOIN category c ON c.category_id = fc.category_id WHERE c.name = 'Action'
+    row_count: 1
+    result_hash: 8a6c7d81263de2a4c129bf094270c1dad75215fec78b57ff1ab3d9e497b16f83
+
+  - id: bn_07
+    lang: bn
+    category: joins
+    question: "কানাডায় কতজন গ্রাহক থাকেন?"
+    sql: >-
+      SELECT count(*) FROM customer cu JOIN address ad ON ad.address_id = cu.address_id JOIN city ci ON ci.city_id = ad.city_id JOIN country co ON co.country_id = ci.country_id WHERE co.country = 'Canada'
+    row_count: 1
+    result_hash: 6cfb7994e5f37a89743ee1faf140597ce1daeee03fe251813f8098aba45fca0f
+
+  - id: bn_08
+    lang: bn
+    category: joins
+    question: "গ্রাহক MARY SMITH মোট কত টাকা পরিশোধ করেছেন?"
+    sql: >-
+      SELECT sum(p.amount) FROM payment p JOIN customer cu ON cu.customer_id = p.customer_id WHERE cu.first_name = 'MARY' AND cu.last_name = 'SMITH'
+    row_count: 1
+    result_hash: a6e56137548aafab133069509adb8bd446940d65d940315b7447d69c2ba9303e
+
+  - id: bn_09
+    lang: bn
+    category: joins
+    question: "প্রতিটি ক্যাটাগরিতে কতগুলো ফিল্ম আছে? ক্যাটাগরির নাম ও সংখ্যা দেখাও।"
+    sql: >-
+      SELECT c.name, count(*) FROM film_category fc JOIN category c ON c.category_id = fc.category_id GROUP BY c.name
+    order_insensitive_cols: true
+    row_count: 16
+    result_hash: e1e601dbc9b70f696dad2b4f13a9203f2ad88d3914a46400b76ff50d6a54d970
+
+  - id: bn_10
+    lang: bn
+    category: aggregates_dates
+    question: "২০২৫ সালে মোট কতগুলো রেন্টাল হয়েছে?"
+    sql: >-
+      SELECT count(*) FROM rental WHERE rental_date >= '2025-01-01' AND rental_date < '2026-01-01'
+    row_count: 1
+    result_hash: c781d7552c1d2b7371ab2b2fc96c8905ff0bdd7847ad6bfff12ef94faddfc926
+
+  - id: bn_11
+    lang: bn
+    category: aggregates_dates
+    question: "গত মাসে মোট আয় কত ছিল?"
+    sql: >-
+      SELECT sum(amount) FROM payment WHERE payment_date >= '2026-06-01' AND payment_date < '2026-07-01'
+    row_count: 1
+    result_hash: 14b139a3c0979522b5b2bed3bc0d6a8df57925aa73dd9ca1712658657c1c24d1
+
+  - id: bn_12
+    lang: bn
+    category: aggregates_dates
+    question: "২০২৪ সালের মার্চ মাসে মোট কত পেমেন্ট হয়েছে?"
+    sql: >-
+      SELECT sum(amount) FROM payment WHERE payment_date >= '2024-03-01' AND payment_date < '2024-04-01'
+    row_count: 1
+    result_hash: b514d2c88713577ce0014419c49e5b9c2a27d2d2f1fcc3f71f2e182bc937f62d
