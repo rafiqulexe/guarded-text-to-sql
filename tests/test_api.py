@@ -51,7 +51,7 @@ async def test_ask_succeeded_returns_sql_rows_score_events_and_model(api: Api) -
     body = await ask(api(ok(GOOD), ok(GOOD_SAME)))
     assert body["status"] == "SUCCEEDED"
     assert body["sql"].endswith("LIMIT 100")  # the executed SQL, always returned
-    assert body["columns"] == ["_col_0"] and body["rows"] == [[194]] and body["limit"] == 100
+    assert body["columns"] == ["count"] and body["rows"] == [[194]] and body["limit"] == 100
     assert body["confidence"] == 0.95 and set(body["breakdown"]) == {
         "judge",
         "consistency",

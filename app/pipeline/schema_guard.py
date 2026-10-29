@@ -9,9 +9,11 @@ Two qualify passes over a copy of the AST_CHECK tree:
    allowlisted columns. The returned tree is what REWRITING emits.
 """
 
+import re
 from typing import Any
 
 from sqlglot import exp
+from sqlglot.dialects.postgres import Postgres
 from sqlglot.errors import OptimizeError, SqlglotError
 from sqlglot.optimizer.qualify import qualify
 from sqlglot.optimizer.scope import Scope, traverse_scope
@@ -124,7 +126,78 @@ def _qualify(tree: exp.Expr, schema: dict[str, object], *, validate: bool) -> ex
         identify=False,
         validate_qualify_columns=validate,
     )
+    _readable_outputs(result)
     return result
+
+
+_GENERATED_ALIAS = re.compile(r"_col_\d+")
+
+
+def _readable_outputs(tree: exp.Expr) -> None:
+    """qualify names unnamed result columns `_col_N`; give the user-facing ones (the root
+    SELECT, or every branch of a root UNION) a readable name instead: MAX(film.length) ->
+    max_length, COUNT(*) -> count. ORDER BY references to the old alias follow the rename."""
+    branches: list[exp.Select] = []
+    pending: list[exp.Expr] = [tree]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, exp.SetOperation):
+            pending += [node.right, node.left]
+        elif isinstance(node, exp.Select):
+            branches.append(node)
+    if not branches:
+        return
+
+    first = branches[0].selects
+    taken = {p.alias_or_name for p in first if not _GENERATED_ALIAS.fullmatch(p.alias_or_name)}
+    names: dict[int, str] = {}
+    renames: dict[str, str] = {}
+    for i, projection in enumerate(first):
+        if isinstance(projection, exp.Alias) and _GENERATED_ALIAS.fullmatch(projection.alias):
+            name = _unique(_suggest_name(projection.this), taken)
+            taken.add(name)
+            names[i] = name
+            renames[projection.alias] = name
+
+    for branch in branches:
+        for i, projection in enumerate(branch.selects):
+            generated = isinstance(projection, exp.Alias) and _GENERATED_ALIAS.fullmatch(
+                projection.alias
+            )
+            if i in names and generated:
+                projection.set("alias", exp.to_identifier(names[i]))
+
+    for owner in [tree, branches[0]]:
+        order = owner.args.get("order")
+        if order is None:
+            continue
+        for column in order.find_all(exp.Column):
+            if not column.table and column.name in renames:
+                column.set("this", exp.to_identifier(renames[column.name]))
+
+
+def _suggest_name(expression: exp.Expr) -> str:
+    if isinstance(expression, exp.Func):
+        base = expression.sql_name().lower()
+        column = expression.find(exp.Column)
+        name = f"{base}_{column.name}" if column is not None else base
+    elif isinstance(expression, exp.Column):
+        name = expression.name
+    else:
+        name = "value"
+    name = re.sub(r"[^a-z0-9_]+", "_", name.lower()).strip("_")
+    if not name or name[0].isdigit() or name.upper() in Postgres.Tokenizer.KEYWORDS:
+        name = f"{name}_value" if name and not name[0].isdigit() else "value"  # never a keyword
+    return name
+
+
+def _unique(name: str, taken: set[str]) -> str:
+    if name not in taken:
+        return name
+    n = 2
+    while f"{name}_{n}" in taken:
+        n += 1
+    return f"{name}_{n}"
 
 
 def _schema(allowlist: Allowlist, *, with_restricted: bool) -> dict[str, object]:
