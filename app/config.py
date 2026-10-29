@@ -106,8 +106,25 @@ class Settings(GuardSettings, LLMSettings):
     self_consistency_n: int = Field(0, ge=0)  # 0 -> PROVIDER_DEFAULTS
     confidence_threshold: float = Field(0.7, ge=0, le=1)
     confidence_high: float = Field(0.85, ge=0, le=1)
+    # SCORING weights (STATE.md §4); must be >= 0 and sum to 1.
+    score_weight_judge: float = 0.45
+    score_weight_consistency: float = 0.25
+    score_weight_repairs: float = 0.15
+    score_weight_sanity: float = 0.15
     max_question_chars: int = Field(1000, gt=0)
     reference_date: date | None = None
+
+    @model_validator(mode="after")
+    def _score_weights_are_valid(self) -> Self:
+        weights = (
+            self.score_weight_judge,
+            self.score_weight_consistency,
+            self.score_weight_repairs,
+            self.score_weight_sanity,
+        )
+        if any(w < 0 for w in weights) or abs(sum(weights) - 1) > 1e-6:
+            raise ValueError(f"SCORE_WEIGHT_* must be >= 0 and sum to 1, got {weights}")
+        return self
 
     @model_validator(mode="after")
     def _self_consistency_default(self) -> Self:

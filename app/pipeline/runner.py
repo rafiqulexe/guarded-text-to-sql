@@ -34,7 +34,7 @@ from app.pipeline.consistency import (
 )
 from app.pipeline.llm import LLMClient, LLMError
 from app.pipeline.result import GuardResult, Outcome, Severity, Stage, blocked, passed
-from app.pipeline.score import ScoreInputs, ScoreResult
+from app.pipeline.score import ScoreInputs, ScoreResult, make_scorer
 from app.pipeline.validate import JudgeFn, make_judge
 
 TERMINAL = frozenset({"SUCCEEDED", "BLOCKED", "FAILED", "CANCELLED", "UNANSWERABLE"})
@@ -213,7 +213,7 @@ class Runner:
         self,
         *,
         client: LLMClient,
-        scorer: ScoreFn,
+        scorer: ScoreFn | None = None,
         judge: JudgeFn | None = None,
         settings: Settings | None = None,
         sessions: sessionmaker[Session] | None = None,
@@ -221,8 +221,9 @@ class Runner:
         conninfo: str | None = None,
         executor: Executor | None = None,
     ) -> None:
-        self.client, self.scorer = client, scorer
+        self.client = client
         self.settings = settings or get_settings()
+        self.scorer: ScoreFn = scorer or make_scorer(self.settings)
         self.judge: JudgeFn = judge or make_judge(client, self.settings.judge_model)
         self.sessions = sessions or get_sessionmaker()
         self.allowlist = allowlist or load_allowlist()

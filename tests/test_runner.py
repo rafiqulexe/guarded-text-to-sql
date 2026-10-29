@@ -524,3 +524,26 @@ async def test_default_judge_uses_the_judge_model_through_the_same_client(
     assert "<rows" in judge_call["user"] and "194" in judge_call["user"]
     row, _ = stored(clean_runs, outcome.run_id)
     assert (row.judge_model, row.judge_verdict) == (settings.judge_model, "yes")
+
+
+@pytest.mark.parametrize(
+    ("sql", "rows", "sanity"),
+    [
+        ("SELECT title FROM film ORDER BY length DESC, title LIMIT 5", 5, 1.0),  # model's own LIMIT
+        ("SELECT title FROM film", 100, 0.5),  # hits the LIMIT 100 we injected
+    ],
+)
+async def test_real_scorer_sanity_through_the_runner(
+    clean_runs: sessionmaker[Session], reader_url: str, sql: str, rows: int, sanity: float
+) -> None:
+    verdict = JudgeVerdict(verdict="yes", expects_rows=True, reason="ok")
+    client = FakeClient(ok(sql), ok(sql), verdict)  # type: ignore[arg-type]
+    runner = Runner(
+        client=client, settings=get_settings(), sessions=clean_runs, conninfo=reader_url
+    )
+    outcome = await runner.ask("Top films?")
+    row, _ = stored(clean_runs, outcome.run_id)
+    assert row.row_count == rows
+    assert row.confidence_breakdown is not None and row.confidence_breakdown["sanity"] == sanity
+    expected = 0.45 + 0.25 + 0.15 + 0.15 * sanity
+    assert float(row.confidence or 0) == pytest.approx(expected, abs=1e-3)
