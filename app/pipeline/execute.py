@@ -5,14 +5,67 @@ shared with DRY_RUN.
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 import psycopg
 from psycopg import errors
 
-from app.pipeline.result import GuardResult, Stage, blocked, failed, repair
+from app.config import get_settings
+from app.pipeline.result import GuardResult, Outcome, Severity, Stage, blocked, failed, repair
 
 CONNECT_TIMEOUT_S = 5
+STAGE = Stage.EXECUTING
+
+
+@dataclass(frozen=True)
+class ExecResult(GuardResult):
+    columns: tuple[str, ...] = ()
+    rows: tuple[tuple[Any, ...], ...] = ()
+
+    @property
+    def row_count(self) -> int:
+        return len(self.rows)
+
+
+def execute(
+    sql: str,
+    *,
+    conninfo: str | None = None,
+    timeout_ms: int | None = None,
+    max_rows: int | None = None,
+) -> ExecResult:
+    """Run SQL that came out of REWRITING (never raw model output)."""
+    settings = get_settings()
+    conninfo = conninfo or settings.target_db_url
+    timeout_ms = settings.statement_timeout_ms if timeout_ms is None else timeout_ms
+    max_rows = settings.max_limit if max_rows is None else max_rows
+
+    try:
+        with reader_transaction(conninfo, timeout_ms) as cur:
+            run_guarded(cur, sql)
+            if cur.description is None:
+                # Only a query returns a result set; anything else got past the guards.
+                return _from(
+                    blocked(STAGE, "no_result_set", "statement returned no rows", critical=True)
+                )
+            columns = tuple(col.name for col in cur.description)
+            rows = tuple(tuple(row) for row in cur.fetchmany(max_rows))
+    except psycopg.Error as exc:
+        return _from(classify_db_error(STAGE, exc))
+    return ExecResult(
+        STAGE,
+        Outcome.PASSED,
+        "executed",
+        f"{len(rows)} rows, {len(columns)} columns",
+        Severity.INFO,
+        columns=columns,
+        rows=rows,
+    )
+
+
+def _from(result: GuardResult) -> ExecResult:
+    return ExecResult(result.stage, result.outcome, result.rule, result.detail, result.severity)
 
 
 @contextmanager
