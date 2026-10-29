@@ -10,7 +10,7 @@ from typing import Any
 
 import psycopg
 
-from app.config import get_settings
+from app.config import get_guard_settings
 from app.pipeline.execute import classify_db_error, reader_transaction, run_guarded
 from app.pipeline.result import GuardResult, Outcome, Severity, Stage
 
@@ -32,7 +32,7 @@ def dry_run(
     max_plan_rows: float | None = None,
     timeout_ms: int | None = None,
 ) -> DryRunResult:
-    settings = get_settings()
+    settings = get_guard_settings()
     conninfo = conninfo or settings.target_db_url
     max_cost = settings.max_cost if max_cost is None else max_cost
     max_plan_rows = settings.max_plan_rows if max_plan_rows is None else max_plan_rows

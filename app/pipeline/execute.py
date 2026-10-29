@@ -11,7 +11,7 @@ from typing import Any
 import psycopg
 from psycopg import errors
 
-from app.config import get_settings
+from app.config import get_guard_settings
 from app.pipeline.result import GuardResult, Outcome, Severity, Stage, blocked, failed, repair
 
 CONNECT_TIMEOUT_S = 5
@@ -36,7 +36,7 @@ def execute(
     max_rows: int | None = None,
 ) -> ExecResult:
     """Run SQL that came out of REWRITING (never raw model output)."""
-    settings = get_settings()
+    settings = get_guard_settings()
     conninfo = conninfo or settings.target_db_url
     timeout_ms = settings.statement_timeout_ms if timeout_ms is None else timeout_ms
     max_rows = settings.max_limit if max_rows is None else max_rows

@@ -6,6 +6,7 @@ dependencies = [
     "alembic>=1.13",
     "anthropic>=2.3.0",
     "fastapi>=0.115",
+    "google-genai>=2.30",
     "jinja2>=3.1",
     "psycopg[binary]>=3.2",
     "pydantic>=2.7",

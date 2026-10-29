@@ -3,8 +3,18 @@ import os
 import psycopg
 import pytest
 
-# Settings require an API key; tests must never need a real one.
-os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
+# Unit tests never use a real key or the developer's model choices: environment variables
+# win over .env, so these pin the LLM settings. Real-API checks live in scripts/live_llm_check.py.
+os.environ.update(
+    {
+        "LLM_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "test-key",
+        "ANTHROPIC_API_KEY": "test-key",
+        "GEN_MODEL": "gemini-3.8-flash",
+        "JUDGE_MODEL": "gemini-3.5-flash-lite",
+        "SELF_CONSISTENCY_N": "2",
+    }
+)
 
 from app.config import DatabaseSettings
 

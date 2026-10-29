@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from sqlglot import exp
 
-from app.config import get_settings
+from app.config import get_guard_settings
 from app.pipeline import ast_guard
 from app.pipeline.result import GuardResult, Outcome, Severity, Stage
 
@@ -34,7 +34,7 @@ def rewrite(
     tree: exp.Expr, *, default_limit: int | None = None, max_limit: int | None = None
 ) -> RewriteResult:
     if default_limit is None or max_limit is None:
-        settings = get_settings()
+        settings = get_guard_settings()
         default_limit = settings.default_limit if default_limit is None else default_limit
         max_limit = settings.max_limit if max_limit is None else max_limit
     if not 0 < default_limit <= max_limit:
