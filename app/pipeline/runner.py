@@ -24,6 +24,7 @@ from app.db.models import GuardEvent, QueryRun
 from app.db.session import get_sessionmaker
 from app.pipeline import dry_run as dry_run_guard
 from app.pipeline import execute as execute_guard
+from app.pipeline import rewrite
 from app.pipeline.accounting import Ledger, Purpose
 from app.pipeline.consistency import (
     CandidateRecord,
@@ -99,6 +100,7 @@ class RunOutcome:
     breakdown: dict[str, float] | None = None
     columns: tuple[str, ...] = ()
     rows: tuple[tuple[Any, ...], ...] = ()
+    limit: int | None = None  # outer LIMIT of `sql` (for "showing N of LIMIT")
     input_flags: list[str] = field(default_factory=list)
     transitions: list[str] = field(default_factory=list)
     guard_events: list[dict[str, Any]] = field(default_factory=list)
@@ -178,8 +180,11 @@ class _Run:
         check_transition(self.state, state)
         now = datetime.now(UTC)
         with self.sessions.begin() as s:
-            row = s.get(QueryRun, self.id)
+            # Locked and re-checked against the stored status, so two requests on the same run
+            # (e.g. confirm + cancel) can't both leave AWAITING_CONFIRMATION.
+            row = s.get(QueryRun, self.id, with_for_update=True)
             assert row is not None
+            check_transition(row.status, state)
             row.status = state
             row.updated_at = now
             row.transitions = [
@@ -259,9 +264,13 @@ class Runner:
 
     async def ask(self, question: str) -> RunOutcome:
         settings = self.settings
+        # An over-long question is BLOCKED in INPUT_CHECK; only its first MAX_QUESTION_CHARS
+        # characters are stored, so a huge body can't bloat the log.
+        limit = settings.max_question_chars
+        stored = question if len(question) <= limit else question[:limit] + " [truncated]"
         run = _Run.create(
             self.sessions,
-            question,
+            stored,
             settings.llm_billing,
             gen_model=settings.gen_model,
             judge_model=settings.judge_model,
@@ -378,6 +387,7 @@ class Runner:
             score=score,
             columns=result.columns,
             rows=result.rows,
+            limit=primary.limit,
         )
 
     # --- POST /api/runs/{id}/confirm --------------------------------------------------------
@@ -386,7 +396,8 @@ class Runner:
         """Re-run the *stored* final_sql through DRY_RUN -> EXECUTING (same guards, same role).
         Never regenerates: no LLM call is made."""
         run, row = _Run.load(self.sessions, run_id)
-        check_transition(run.state, "SUCCEEDED")  # only from AWAITING_CONFIRMATION
+        if run.state != "AWAITING_CONFIRMATION":  # SCORING -> SUCCEEDED is legal, but not here
+            raise IllegalTransition(f"only AWAITING_CONFIRMATION can be confirmed, not {run.state}")
         sql = row.final_sql or ""
         plan = dry_run_guard.dry_run(sql, conninfo=self.conninfo)
         run.event(plan, sql)
@@ -416,6 +427,7 @@ class Runner:
             breakdown=row.confidence_breakdown,
             columns=executed.columns,
             rows=executed.rows,
+            limit=rewrite.outer_limit(sql),
             input_flags=list(row.input_flags),
             transitions=run.transitions,
             guard_events=run.events,
@@ -476,6 +488,7 @@ class Runner:
         score: ScoreResult | None = None,
         columns: tuple[str, ...] = (),
         rows: tuple[tuple[Any, ...], ...] = (),
+        limit: int | None = None,
     ) -> RunOutcome:
         return RunOutcome(
             run.id,
@@ -486,6 +499,7 @@ class Runner:
             breakdown=score.breakdown if score else None,
             columns=columns,
             rows=rows,
+            limit=limit,
             input_flags=flags or [],
             transitions=run.transitions,
             guard_events=run.events,

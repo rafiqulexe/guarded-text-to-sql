@@ -7,6 +7,7 @@ or wrapped with MAX_LIMIT. The emitted SQL is re-checked by AST_CHECK before it 
 
 from dataclasses import dataclass
 
+import sqlglot
 from sqlglot import exp
 
 from app.config import get_guard_settings
@@ -105,6 +106,16 @@ def _int_literal(node: exp.Expr | None) -> int | None:
     if isinstance(node, exp.Literal) and not node.is_string and node.this.isdigit():
         return int(node.this)
     return None
+
+
+def outer_limit(sql: str) -> int | None:
+    """The integer outer LIMIT of SQL emitted by `rewrite` (None if there isn't one)."""
+    try:
+        query = sqlglot.parse_one(sql, dialect=DIALECT)
+    except sqlglot.ParseError:
+        return None
+    limit = query.args.get("limit")
+    return _int_literal(limit.expression) if isinstance(limit, exp.Limit) else None
 
 
 def _blocked(detail: str) -> RewriteResult:
