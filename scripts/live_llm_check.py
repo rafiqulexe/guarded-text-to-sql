@@ -32,7 +32,7 @@ from app.pipeline.generate import generate, render_generate_prompt, repair
 from app.pipeline.llm import make_client
 from app.pipeline.result import GuardResult, Outcome
 from app.pipeline.runner import Runner
-from app.pipeline.validate import judge
+from app.pipeline.validate import DataDates, judge
 from app.schema_context import build_schema_context, estimate_tokens
 
 
@@ -255,6 +255,7 @@ async def check_judge() -> None:
             executed.rows,
             client=client,
             model=settings.judge_model,
+            dates=DataDates.from_settings(settings),
         )
         v = response.parsed
         via = f" (fallback from {response.fallback_from})" if response.fallback_from else ""

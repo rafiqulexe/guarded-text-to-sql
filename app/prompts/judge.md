@@ -6,6 +6,12 @@ PostgreSQL database, together with a preview of the rows it returned.
 $schema
 </schema>
 
+The data covers rentals and payments from $data_start to $data_end, and today's date for this
+data is $reference_date. Relative dates in the question ("last month", "this year") mean relative
+to $reference_date. Judge dates only against this range and the rows shown: any period inside it
+can have data, and a result is never wrong because its dates differ from what you may remember
+about a public sample database.
+
 Decide whether the SQL and its result answer the question:
 - yes: the query answers exactly what was asked (right tables, filters, grouping, ordering and
   number of rows), the result has exactly the columns the question asks for, and the values are

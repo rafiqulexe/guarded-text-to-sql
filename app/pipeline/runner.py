@@ -38,7 +38,7 @@ from app.pipeline.consistency import (
 from app.pipeline.llm import LLMClient, LLMError, LLMResponse
 from app.pipeline.result import GuardResult, Outcome, Severity, Stage, blocked, passed
 from app.pipeline.score import ScoreInputs, ScoreResult, make_scorer
-from app.pipeline.validate import JudgeFn, make_judge
+from app.pipeline.validate import DataDates, JudgeFn, make_judge
 
 Billing = Literal["free", "paid"]
 
@@ -265,7 +265,9 @@ class Runner:
         self.client = client
         self.settings = settings or get_settings()
         self.scorer: ScoreFn = scorer or make_scorer(self.settings)
-        self.judge: JudgeFn = judge or make_judge(client, self.settings.judge_model)
+        self.judge: JudgeFn = judge or make_judge(
+            client, self.settings.judge_model, DataDates.from_settings(self.settings)
+        )
         self.sessions = sessions or get_sessionmaker()
         self.allowlist = allowlist or load_allowlist()
         self.conninfo = conninfo

@@ -142,9 +142,12 @@ minute to stay inside free-tier limits. When questions run back to back, roughly
 for that window. That wait is the 50-second p95. Without those waits, p95 is about 8.5 s. The
 latency target is meant for a paid tier.
 
-**Known weakness:** the judge sometimes relies on what it remembers about the public Pagila dataset
-instead of the data it is shown. In one Bangla case it called a correct answer wrong. The error is
-on the safe side: that answer needed confirmation instead of being shown directly.
+**Fixed since this run:** the correct answer in the lowest bucket was a Bangla question about
+2025. The judge rejected it because it assumed, from memory of the public Pagila dataset, that the
+data is from 2005/06. The error was on the safe side: the answer needed confirmation instead of
+being shown directly. The judge is now given the data's real date range and reference date
+(`DATA_START_DATE`, `DATA_END_DATE`, `REFERENCE_DATE` in `.env`). Re-run on its own, that case is
+answered correctly at confidence 1.00.
 
 ## Quickstart
 

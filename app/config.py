@@ -129,6 +129,9 @@ class Settings(GuardSettings, LLMSettings):
     score_weight_sanity: float = 0.10
     max_question_chars: int = Field(1000, gt=0)
     reference_date: date | None = None
+    # First and last rental / payment date in the loaded data; the judge is given this range.
+    data_start_date: date | None = None
+    data_end_date: date | None = None
 
     @model_validator(mode="after")
     def _score_weights_are_valid(self) -> Self:
@@ -140,6 +143,15 @@ class Settings(GuardSettings, LLMSettings):
         )
         if any(w < 0 for w in weights) or abs(sum(weights) - 1) > 1e-6:
             raise ValueError(f"SCORE_WEIGHT_* must be >= 0 and sum to 1, got {weights}")
+        return self
+
+    @model_validator(mode="after")
+    def _data_dates_are_ordered(self) -> Self:
+        start, end, ref = self.data_start_date, self.data_end_date, self.reference_date
+        if start and end and start > end:
+            raise ValueError(f"DATA_START_DATE {start} is after DATA_END_DATE {end}")
+        if end and ref and end >= ref:
+            raise ValueError(f"REFERENCE_DATE {ref} must be after DATA_END_DATE {end}")
         return self
 
     @model_validator(mode="after")

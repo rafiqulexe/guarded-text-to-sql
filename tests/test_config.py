@@ -81,3 +81,15 @@ def test_fallback_can_be_disabled_or_must_match_provider(no_llm_env: None) -> No
     assert off.llm_fallback_model == ""
     with pytest.raises(ValidationError, match="LLM_FALLBACK_MODEL"):
         LLMSettings(_env_file=None, gemini_api_key="k", llm_fallback_model="claude-haiku-5-5")
+
+
+@pytest.mark.parametrize(
+    ("dates", "message"),
+    [
+        ({"data_start_date": "2026-07-28", "data_end_date": "2022-01-23"}, "is after"),
+        ({"data_end_date": "2026-07-29", "reference_date": "2026-07-29"}, "must be after"),
+    ],
+)
+def test_data_dates_must_be_ordered(dates: dict[str, str], message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Settings(_env_file=None, gemini_api_key="k", **dates)  # type: ignore[arg-type]
