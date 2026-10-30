@@ -34,6 +34,12 @@ async def test_index_renders_badge_cutoffs_from_config(client: httpx.AsyncClient
     assert f'maxlength="{settings.max_question_chars}"' in response.text
 
 
+async def test_index_names_the_product_in_tab_and_header(client: httpx.AsyncClient) -> None:
+    html = (await client.get("/")).text
+    assert "<title>Guarded Text-to-SQL</title>" in html
+    assert '<h1 class="page-title">Guarded Text-to-SQL</h1>' in html
+
+
 async def test_security_headers_forbid_inline_and_foreign_scripts(
     client: httpx.AsyncClient,
 ) -> None:
